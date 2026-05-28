@@ -18,6 +18,7 @@ type Venue = {
   address: string | null;
   requires_opening_checks: boolean;
   status: string | null;
+  technical_contact_name?: string;
 };
 type VenueDocument = {
     id: number;
