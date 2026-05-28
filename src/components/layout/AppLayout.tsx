@@ -29,6 +29,7 @@ export default function AppLayout({
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userDisplay, setUserDisplay] = useState<string>("");
+   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -70,6 +71,83 @@ export default function AppLayout({
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <div className="flex">
+        {mobileMenuOpen && (
+  <div className="fixed inset-0 z-[100] md:hidden">
+    <button
+      type="button"
+      className="absolute inset-0 bg-black/60"
+      onClick={() => setMobileMenuOpen(false)}
+      aria-label="Close menu"
+    />
+
+    <aside className="absolute left-0 top-0 flex h-full w-72 flex-col border-r border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+      <div className="mb-6 flex items-center justify-between">
+        <Image
+          src="/logo.png"
+          alt="Festival Theatre"
+          width={180}
+          height={65}
+          className="h-auto w-auto"
+          priority
+        />
+
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(false)}
+          className="rounded-lg bg-zinc-800 px-3 py-2"
+        >
+          ✕
+        </button>
+      </div>
+
+      <nav className="flex flex-col gap-2">
+        {canAccessDashboard(profile) && (
+          <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            Dashboard
+          </Link>
+        )}
+
+        {canAccessSchedule(profile) && (
+          <Link href="/schedule" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            Schedule
+          </Link>
+        )}
+
+        {canAccessTechnicalReport(profile) && (
+          <Link href="/reports" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            Technical Reports
+          </Link>
+        )}
+
+        {canAccessFOHReport(profile) && (
+          <Link href="/foh-reports" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            FOH Reports
+          </Link>
+        )}
+
+        {canAccessTechnicalSpecifications(profile) && (
+          <Link href="/tech-specs" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            Technical Specifications
+          </Link>
+        )}
+
+        {canAccessAdmin(profile) && (
+          <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 hover:bg-zinc-800">
+            Admin
+          </Link>
+        )}
+      </nav>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mt-auto rounded-lg bg-zinc-800 px-4 py-3 text-left text-sm"
+      >
+        Log out
+      </button>
+    </aside>
+  </div>
+)}
         <aside className="sticky top-0 hidden h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900 p-6 md:flex">
           <div className="flex items-center justify-center px-4 py-6">
             <Image
@@ -150,6 +228,13 @@ export default function AppLayout({
         <div className="flex-1">
           <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-900 px-6 py-4">
             <div className="flex items-center justify-between">
+              <button
+  type="button"
+  onClick={() => setMobileMenuOpen(true)}
+  className="rounded-lg bg-zinc-800 px-3 py-2 text-sm md:hidden"
+>
+  Menu
+</button>
               <h2 className="text-xl font-semibold">Festival Season Hub</h2>
 
               <div className="flex items-center gap-3">
