@@ -285,7 +285,7 @@ export default function AdminShowsPage() {
         {
           name: newShow.name,
           cancelled: newShow.cancelled,
-          date_time: newShow.date_time?.toISOString(),
+          date_time: formatLocalDateTime(newShow.date_time),
           venue: newShow.venue,
           venue_id: newShow.venue_id,
           crew_call: newShow.crew_call || null,
@@ -374,7 +374,7 @@ export default function AdminShowsPage() {
       .update({
         name: editShow.name,
         cancelled: editShow.cancelled,
-        date_time: editShow.date_time?.toISOString(),
+        date_time: formatLocalDateTime(editShow.date_time),
         venue: editShow.venue,
         venue_id: editShow.venue_id,
         crew_call: editShow.crew_call || null,
@@ -1157,4 +1157,16 @@ function Field({
       {children}
     </div>
   );
+}
+
+function formatLocalDateTime(date: Date | null) {
+  if (!date) return null;
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:00`;
 }
