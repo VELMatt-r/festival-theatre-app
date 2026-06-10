@@ -40,13 +40,13 @@ export default function AdminPage() {
             </p>
           </Link>
           <Link
-          href="/admin/crew"
+          href="/admin/reports"
           className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-indigo-500 hover:bg-zinc-800">
             <h2 className="text-xl font-semibold text-white">
-              Crew
+              Reports
             </h2>
             <p className="mt-2 text-sm text-zinc-400">
-              Manage crew records and operational contact information.
+              Run reports including Shows, Crewing, Staffing, etc.
             </p>
             </Link>
         <Link
@@ -58,7 +58,7 @@ export default function AdminPage() {
             <p className="mt-2 text-sm text-zinc-400">
               Manage venue records, technical contacts and operational notes.
               </p>
-</Link>
+        </Link>
         </div>
       </div>
     </AppLayout>

@@ -39,7 +39,7 @@ export default function ReportsPage() {
         created_at,
         submitted_at,
         submitted_by_name
-      `)
+      `) 
       .order("created_at", { ascending: false });
 
     if (error) {

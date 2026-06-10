@@ -56,7 +56,7 @@ export default function NewShowReportPage() {
         .select("id, name, requires_opening_checks"),
 
       supabase
-        .from("crew")
+        .from("profiles")
         .select("id, name, role, department, status")
         .eq("status", "active")
         .order("name"),

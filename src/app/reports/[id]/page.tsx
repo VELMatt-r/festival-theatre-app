@@ -53,7 +53,8 @@ export default function ReportPage() {
   }, [report, dirty]);
 
   function updateField(field: string, value: any) {
-  if (report?.status === "submitted") return;
+    if (report?.status === "submitted") return;
+
     setReport((current: any) => ({
       ...current,
       [field]: value,
@@ -88,7 +89,6 @@ export default function ReportPage() {
         act_2_clearance_time: report.act_2_clearance_time,
         act_2_start_time: report.act_2_start_time,
         act_2_end_time: report.act_2_end_time,
-
         technical_issues_venue: report.technical_issues_venue,
         technical_issues_company: report.technical_issues_company,
         foh_issues: report.foh_issues,
@@ -104,7 +104,6 @@ export default function ReportPage() {
         bins_emptied: report.bins_emptied,
         doors_locked: report.doors_locked,
         updated_at: new Date().toISOString(),
-        
       })
       .eq("id", reportId);
 
@@ -119,6 +118,67 @@ export default function ReportPage() {
     setLastSaved(new Date().toLocaleTimeString("en-GB"));
   }
 
+  async function submitReport() {
+    const confirmed = window.confirm(
+      "Submit this report? This will finalise the report and disable editing."
+    );
+
+    if (!confirmed) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    let submittedByName = "Unknown User";
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .single();
+
+      submittedByName = profile?.display_name || user.email || "Unknown User";
+    }
+
+    const { error } = await supabase
+      .from("show_reports")
+      .update({
+        status: "submitted",
+        submitted_by: user?.id || null,
+        submitted_by_name: submittedByName,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", reportId);
+
+    if (error) {
+      console.error(error);
+      alert("Failed to submit report.");
+      return;
+    }
+
+    await supabase.from("activity_log").insert([
+      {
+        action: "report_submitted",
+        description: `Submitted report for ${report.show_name}`,
+        user_id: user?.id,
+        user_name: submittedByName,
+        show_id: report.show_id,
+        report_id: reportId,
+      },
+    ]);
+
+    setReport((current: any) => ({
+      ...current,
+      status: "submitted",
+      submitted_by_name: submittedByName,
+      submitted_at: new Date().toISOString(),
+    }));
+
+    alert("Report submitted successfully.");
+  }
+
   if (!report) {
     return (
       <AppLayout>
@@ -126,44 +186,11 @@ export default function ReportPage() {
       </AppLayout>
     );
   }
-async function submitReport() {
-  const confirmed = window.confirm(
-    "Submit this report? This will finalise the report and disable editing."
-  );
 
-  if (!confirmed) return;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { error } = await supabase
-    .from("show_reports")
-    .update({
-      status: "submitted",
-      submitted_by: user?.id || null,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", reportId);
-
-  if (error) {
-    console.error(error);
-    alert("Failed to submit report.");
-    return;
-  }
-
-  setReport((current: any) => ({
-    ...current,
-    status: "submitted",
-  }));
-
-  alert("Report submitted successfully.");
-}
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 border-b border-zinc-800 pb-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-wide text-zinc-400">
               Show Report
@@ -177,9 +204,26 @@ async function submitReport() {
               {report.venue_name} · {report.performance_date} ·{" "}
               {report.performance_time}
             </p>
+
+            {report.status === "submitted" && (
+              <div className="mt-3 rounded-xl border border-green-500/30 bg-green-950/20 p-4 text-sm text-zinc-300">
+                <p className="font-medium text-green-300">Submitted Report</p>
+
+                <p className="mt-1">
+                  Submitted by {report.submitted_by_name || "Unknown"}
+                </p>
+
+                <p>
+                  Submitted at{" "}
+                  {report.submitted_at
+                    ? new Date(report.submitted_at).toLocaleString("en-GB")
+                    : "Unknown"}
+                </p>
+              </div>
+            )}
           </div>
 
-          <div className="text-right text-sm text-zinc-400">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-left text-sm text-zinc-400 md:text-right">
             <p>Status: {report.status}</p>
 
             <p>
@@ -193,35 +237,40 @@ async function submitReport() {
         </div>
 
         <Tabs defaultValue="opening" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
-            <TabsTrigger
-  value="opening"
-  className="rounded-xl text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
->
-  Opening Checks
-</TabsTrigger>
+          <div className="-mx-2 overflow-x-auto px-2 pb-1">
+            <TabsList className="flex w-max min-w-full gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
+              <TabsTrigger
+                value="opening"
+                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+              >
+                <span className="hidden sm:inline">Opening Checks</span>
+                <span className="sm:hidden">Opening</span>
+              </TabsTrigger>
 
-<TabsTrigger
-  value="show"
-  className="rounded-xl text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
->
-  Show Timings & Notes
-</TabsTrigger>
+              <TabsTrigger
+                value="show"
+                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+              >
+                <span className="hidden sm:inline">Show Timings & Notes</span>
+                <span className="sm:hidden">Timings</span>
+              </TabsTrigger>
 
-<TabsTrigger
-  value="closing"
-  className="rounded-xl text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
->
-  Closing Checks
-</TabsTrigger>
+              <TabsTrigger
+                value="closing"
+                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+              >
+                <span className="hidden sm:inline">Closing Checks</span>
+                <span className="sm:hidden">Closing</span>
+              </TabsTrigger>
 
-<TabsTrigger
-  value="submit"
-  className="rounded-xl text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
->
-  Submit
-</TabsTrigger>
-          </TabsList>
+              <TabsTrigger
+                value="submit"
+                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
+              >
+                Submit
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="opening">
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
@@ -244,9 +293,7 @@ async function submitReport() {
                   <YesNo
                     label="Sides Open"
                     value={report.sides_open}
-                    onChange={(value) =>
-                      updateField("sides_open", value)
-                    }
+                    onChange={(value) => updateField("sides_open", value)}
                   />
 
                   {report.sides_open === false && (
@@ -262,9 +309,7 @@ async function submitReport() {
                   <YesNo
                     label="Any Damage To Structure"
                     value={report.structure_damage}
-                    onChange={(value) =>
-                      updateField("structure_damage", value)
-                    }
+                    onChange={(value) => updateField("structure_damage", value)}
                   />
 
                   {report.structure_damage === true && (
@@ -288,17 +333,13 @@ async function submitReport() {
                   <YesNo
                     label="LX Working"
                     value={report.lx_working}
-                    onChange={(value) =>
-                      updateField("lx_working", value)
-                    }
+                    onChange={(value) => updateField("lx_working", value)}
                   />
 
                   <YesNo
                     label="PA Working"
                     value={report.pa_working}
-                    onChange={(value) =>
-                      updateField("pa_working", value)
-                    }
+                    onChange={(value) => updateField("pa_working", value)}
                   />
 
                   <YesNo
@@ -330,252 +371,243 @@ async function submitReport() {
           </TabsContent>
 
           <TabsContent value="show">
-  <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-    <h2 className="text-2xl font-bold">
-      Show Timings & Notes
-    </h2>
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="text-2xl font-bold">Show Timings & Notes</h2>
 
-    <div className="mt-6 space-y-6">
+              <div className="mt-6 space-y-6">
+                <div className="max-w-sm">
+                  <TimeField
+                    label="House Open"
+                    value={report.house_open_time}
+                    onChange={(value) =>
+                      updateField("house_open_time", value)
+                    }
+                  />
+                </div>
 
-  <div className="max-w-sm">
-    <TimeField
-      label="House Open"
-      value={report.house_open_time}
-      onChange={(value) =>
-        updateField("house_open_time", value)
-      }
-    />
-  </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <TimeField
+                    label="Act 1 Clearance"
+                    value={report.act_1_clearance_time}
+                    onChange={(value) =>
+                      updateField("act_1_clearance_time", value)
+                    }
+                  />
 
-  <div className="grid gap-4 md:grid-cols-3">
-    <TimeField
-      label="Act 1 Clearance"
-      value={report.act_1_clearance_time}
-      onChange={(value) =>
-        updateField("act_1_clearance_time", value)
-      }
-    />
+                  <TimeField
+                    label="Act 1 Start"
+                    value={report.act_1_start_time}
+                    onChange={(value) =>
+                      updateField("act_1_start_time", value)
+                    }
+                  />
 
-    <TimeField
-      label="Act 1 Start"
-      value={report.act_1_start_time}
-      onChange={(value) =>
-        updateField("act_1_start_time", value)
-      }
-    />
+                  <TimeField
+                    label="Act 1 End"
+                    value={report.act_1_end_time}
+                    onChange={(value) =>
+                      updateField("act_1_end_time", value)
+                    }
+                  />
+                </div>
 
-    <TimeField
-      label="Act 1 End"
-      value={report.act_1_end_time}
-      onChange={(value) =>
-        updateField("act_1_end_time", value)
-      }
-    />
-  </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <TimeField
+                    label="Act 2 Clearance"
+                    value={report.act_2_clearance_time}
+                    onChange={(value) =>
+                      updateField("act_2_clearance_time", value)
+                    }
+                  />
 
-  <div className="grid gap-4 md:grid-cols-3">
-    <TimeField
-      label="Act 2 Clearance"
-      value={report.act_2_clearance_time}
-      onChange={(value) =>
-        updateField("act_2_clearance_time", value)
-      }
-    />
+                  <TimeField
+                    label="Act 2 Start"
+                    value={report.act_2_start_time}
+                    onChange={(value) =>
+                      updateField("act_2_start_time", value)
+                    }
+                  />
 
-    <TimeField
-      label="Act 2 Start"
-      value={report.act_2_start_time}
-      onChange={(value) =>
-        updateField("act_2_start_time", value)
-      }
-    />
+                  <TimeField
+                    label="Act 2 End"
+                    value={report.act_2_end_time}
+                    onChange={(value) =>
+                      updateField("act_2_end_time", value)
+                    }
+                  />
+                </div>
 
-    <TimeField
-      label="Act 2 End"
-      value={report.act_2_end_time}
-      onChange={(value) =>
-        updateField("act_2_end_time", value)
-      }
-    />
-  </div>
+                <TextArea
+                  label="Technical Issues (Venue)"
+                  value={report.technical_issues_venue}
+                  onChange={(value) =>
+                    updateField("technical_issues_venue", value)
+                  }
+                />
 
-  <TextArea
-    label="Technical Issues (Venue)"
-    value={report.technical_issues_venue}
-    onChange={(value) =>
-      updateField("technical_issues_venue", value)
-    }
-  />
+                <TextArea
+                  label="Technical Issues (Company)"
+                  value={report.technical_issues_company}
+                  onChange={(value) =>
+                    updateField("technical_issues_company", value)
+                  }
+                />
 
-  <TextArea
-    label="Technical Issues (Company)"
-    value={report.technical_issues_company}
-    onChange={(value) =>
-      updateField("technical_issues_company", value)
-    }
-  />
+                <TextArea
+                  label="FOH Issues"
+                  value={report.foh_issues}
+                  onChange={(value) => updateField("foh_issues", value)}
+                />
 
-  <TextArea
-    label="FOH Issues"
-    value={report.foh_issues}
-    onChange={(value) =>
-      updateField("foh_issues", value)
-    }
-  />
+                <TextArea
+                  label="H&S Incidents"
+                  value={report.health_safety_incidents}
+                  onChange={(value) =>
+                    updateField("health_safety_incidents", value)
+                  }
+                />
 
-  <TextArea
-    label="H&S Incidents"
-    value={report.health_safety_incidents}
-    onChange={(value) =>
-      updateField("health_safety_incidents", value)
-    }
-  />
+                <TextArea
+                  label="General Comments"
+                  value={report.general_comments}
+                  onChange={(value) =>
+                    updateField("general_comments", value)
+                  }
+                />
 
-  <TextArea
-    label="General Comments"
-    value={report.general_comments}
-    onChange={(value) =>
-      updateField("general_comments", value)
-    }
-  />
-
-  <TextArea
-    label="Additional Recharges"
-    value={report.additional_recharges}
-    onChange={(value) =>
-      updateField("additional_recharges", value)
-    }
-  />
-</div>
-  </section>
-</TabsContent>
+                <TextArea
+                  label="Additional Recharges"
+                  value={report.additional_recharges}
+                  onChange={(value) =>
+                    updateField("additional_recharges", value)
+                  }
+                />
+              </div>
+            </section>
+          </TabsContent>
 
           <TabsContent value="closing">
-  <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-    <h2 className="text-2xl font-bold">Closing Checks</h2>
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="text-2xl font-bold">Closing Checks</h2>
 
-    {!requiresOpeningChecks ? (
-      <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-        Closing checks are not required for this venue.
-      </p>
-    ) : (
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <YesNo
-          label="Sides Closed"
-          value={report.sides_closed}
-          onChange={(value) => updateField("sides_closed", value)}
-        />
+              {!requiresOpeningChecks ? (
+                <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Closing checks are not required for this venue.
+                </p>
+              ) : (
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <YesNo
+                    label="Sides Closed"
+                    value={report.sides_closed}
+                    onChange={(value) => updateField("sides_closed", value)}
+                  />
 
-        {report.sides_closed === false && (
-          <>
-            <TextArea
-              label="Reason For Sides Not Closed"
-              value={report.sides_closed_reason}
-              onChange={(value) =>
-                updateField("sides_closed_reason", value)
-              }
-            />
+                  {report.sides_closed === false && (
+                    <>
+                      <TextArea
+                        label="Reason For Sides Not Closed"
+                        value={report.sides_closed_reason}
+                        onChange={(value) =>
+                          updateField("sides_closed_reason", value)
+                        }
+                      />
 
-            <YesNo
-              label="Barriers In Place"
-              value={report.barriers_in_place}
-              onChange={(value) =>
-                updateField("barriers_in_place", value)
-              }
-            />
-          </>
-        )}
+                      <YesNo
+                        label="Barriers In Place"
+                        value={report.barriers_in_place}
+                        onChange={(value) =>
+                          updateField("barriers_in_place", value)
+                        }
+                      />
+                    </>
+                  )}
 
-        <YesNo
-          label="Any New Damage To Structure"
-          value={report.new_structure_damage}
-          onChange={(value) =>
-            updateField("new_structure_damage", value)
-          }
-        />
+                  <YesNo
+                    label="Any New Damage To Structure"
+                    value={report.new_structure_damage}
+                    onChange={(value) =>
+                      updateField("new_structure_damage", value)
+                    }
+                  />
 
-        {report.new_structure_damage === true && (
-          <TextArea
-            label="New Damage Details"
-            value={report.new_structure_damage_details}
-            onChange={(value) =>
-              updateField("new_structure_damage_details", value)
-            }
-          />
-        )}
+                  {report.new_structure_damage === true && (
+                    <TextArea
+                      label="New Damage Details"
+                      value={report.new_structure_damage_details}
+                      onChange={(value) =>
+                        updateField("new_structure_damage_details", value)
+                      }
+                    />
+                  )}
 
-        <TextInput
-          label="Closing Meter Reading"
-          value={report.closing_meter_reading}
-          onChange={(value) =>
-            updateField("closing_meter_reading", value)
-          }
-        />
+                  <TextInput
+                    label="Closing Meter Reading"
+                    value={report.closing_meter_reading}
+                    onChange={(value) =>
+                      updateField("closing_meter_reading", value)
+                    }
+                  />
 
-        <YesNo
-          label="Bins Emptied"
-          value={report.bins_emptied}
-          onChange={(value) => updateField("bins_emptied", value)}
-        />
+                  <YesNo
+                    label="Bins Emptied"
+                    value={report.bins_emptied}
+                    onChange={(value) => updateField("bins_emptied", value)}
+                  />
 
-        <YesNo
-          label="Doors Locked"
-          value={report.doors_locked}
-          onChange={(value) => updateField("doors_locked", value)}
-        />
-      </div>
-    )}
-  </section>
-</TabsContent>
+                  <YesNo
+                    label="Doors Locked"
+                    value={report.doors_locked}
+                    onChange={(value) => updateField("doors_locked", value)}
+                  />
+                </div>
+              )}
+            </section>
+          </TabsContent>
 
-         <TabsContent value="submit">
-  <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-    <h2 className="text-2xl font-bold">
-      Submit / Finalise
-    </h2>
+          <TabsContent value="submit">
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="text-2xl font-bold">Submit / Finalise</h2>
 
-    <div className="mt-6 space-y-4">
-      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-        <p className="font-medium text-white">
-          Ready to submit?
-        </p>
+              <div className="mt-6 space-y-4">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="font-medium text-white">Ready to submit?</p>
 
-        <p className="mt-2 text-sm text-zinc-400">
-          Submitting this report will mark it as completed
-          and lock further editing.
-        </p>
-      </div>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Submitting this report will mark it as completed and lock
+                    further editing.
+                  </p>
+                </div>
 
-      {report.status === "submitted" ? (
-        <div className="rounded-xl border border-green-500/30 bg-green-950/20 p-4">
-          <p className="font-medium text-green-300">
-            Report Submitted
-          </p>
+                {report.status === "submitted" ? (
+                  <div className="rounded-xl border border-green-500/30 bg-green-950/20 p-4">
+                    <p className="font-medium text-green-300">
+                      Report Submitted
+                    </p>
 
-          <p className="mt-2 text-sm text-zinc-400">
-            This report has already been finalised.
-          </p>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={submitReport}
-          className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
-        >
-          Submit Report
-        </button>
-      )}
-    </div>
-  </section>
-</TabsContent>
+                    <p className="mt-2 text-sm text-zinc-400">
+                      This report has already been finalised.
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={submitReport}
+                    className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500 sm:w-auto"
+                  >
+                    Submit Report
+                  </button>
+                )}
+              </div>
+            </section>
+          </TabsContent>
         </Tabs>
 
-        <div className="flex gap-3">
-         <button
-         type="button"
-         onClick={saveReport}
-         disabled={report.status === "submitted"}
-            className="rounded-xl bg-zinc-800 px-5 py-3 font-medium transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+        <div className="flex">
+          <button
+            type="button"
+            onClick={saveReport}
+            disabled={report.status === "submitted"}
+            className="w-full rounded-xl bg-zinc-800 px-5 py-3 font-medium transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Save Draft
           </button>
@@ -629,24 +661,20 @@ function TimeField({
 
   return (
     <div>
-      <span className="mb-2 block text-sm text-zinc-400">
-        {label}
-      </span>
+      <span className="mb-2 block text-sm text-zinc-400">{label}</span>
 
       <div className="flex gap-2">
         <input
           type="time"
           value={value || ""}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
           className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
         />
 
         <button
           type="button"
           onClick={setNow}
-          className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium transition hover:bg-zinc-700"
+          className="shrink-0 rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium transition hover:bg-zinc-700"
         >
           Now
         </button>
@@ -693,7 +721,7 @@ function YesNo({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
+      className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition ${
         checked
           ? "border-green-500 bg-green-950/30 text-white"
           : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600"
@@ -702,7 +730,7 @@ function YesNo({
       <span>{label}</span>
 
       <span
-        className={`flex h-6 w-6 items-center justify-center rounded-full border text-sm ${
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-sm ${
           checked
             ? "border-green-400 bg-green-500 text-white"
             : "border-zinc-600 text-zinc-500"
