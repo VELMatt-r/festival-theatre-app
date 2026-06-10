@@ -753,27 +753,56 @@ function ShowDialog({
           <DialogTitle className="text-3xl font-bold">{title}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="show" className="mt-4">
-          <TabsList className="grid w-full grid-cols-6 bg-zinc-800 h-14">
-            <TabsTrigger value="show" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              Show
-            </TabsTrigger>
-            <TabsTrigger value="company" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              Visiting Company
-            </TabsTrigger>
-            <TabsTrigger value="notes" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              Notes
-            </TabsTrigger>
-            <TabsTrigger value="crew" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              Technical Crew
-            </TabsTrigger>
-            <TabsTrigger value="foh" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              FOH Staffing
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="text-zinc-300 text-base font-medium data-[state=active]:bg-zinc-100 data-[state=active]:text-black">
-              Documents
-            </TabsTrigger>
-          </TabsList>
+<Tabs defaultValue="show" className="mt-4">
+        <div className="-mx-1 overflow-x-auto px-1 pb-2">
+  <TabsList className="flex h-auto w-max min-w-full gap-1 rounded-xl bg-zinc-800 p-1">
+    <TabsTrigger
+      value="show"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      Show
+    </TabsTrigger>
+
+    <TabsTrigger
+      value="company"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      <span className="hidden sm:inline">Visiting Company</span>
+      <span className="sm:hidden">Company</span>
+    </TabsTrigger>
+
+    <TabsTrigger
+      value="notes"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      Notes
+    </TabsTrigger>
+
+    <TabsTrigger
+      value="crew"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      <span className="hidden sm:inline">Technical Crew</span>
+      <span className="sm:hidden">Tech</span>
+    </TabsTrigger>
+
+    <TabsTrigger
+      value="foh"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      <span className="hidden sm:inline">FOH Staffing</span>
+      <span className="sm:hidden">FOH</span>
+    </TabsTrigger>
+
+    <TabsTrigger
+      value="documents"
+      className="shrink-0 rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 data-[state=active]:bg-zinc-100 data-[state=active]:text-black sm:text-base"
+    >
+      <span className="hidden sm:inline">Documents</span>
+      <span className="sm:hidden">Docs</span>
+    </TabsTrigger>
+  </TabsList>
+</div>
 
           <TabsContent value="show">
             <div className="mt-6 grid gap-4 md:grid-cols-2">
