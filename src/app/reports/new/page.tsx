@@ -45,11 +45,19 @@ export default function NewShowReportPage() {
   }, []);
 
   async function loadData() {
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  
     const [showsResult, venuesResult, crewResult] = await Promise.all([
       supabase
         .from("shows")
         .select("id, name, date_time, venue, venue_id")
-        .order("date_time", { ascending: false }),
+        .gte(
+          "date_time",
+          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+          )
+        .order("date_time", { ascending: true }),
 
       supabase
         .from("venues")
