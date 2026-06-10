@@ -81,7 +81,7 @@ export default function TechnicalCrewAssignmentsReportPage() {
       return;
     }
 
-    setShows((showsData || []) as ShowRow[]);
+    setShows((showsData || []) as unknown as ShowRow[]);
 
     const { data: venuesData, error: venuesError } = await supabase
       .from("venues")

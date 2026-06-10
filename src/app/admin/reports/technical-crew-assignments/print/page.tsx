@@ -52,7 +52,7 @@ export default function TechnicalCrewAssignmentsPrintPage() {
         return;
       }
 
-      setShows((data || []) as ShowRow[]);
+      setShows((data || []) as unknown as ShowRow[]);
       setLoading(false);
     }
 
