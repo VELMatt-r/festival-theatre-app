@@ -25,12 +25,16 @@ type ShowRow = {
   venue_id: number | null;
   cancelled: boolean | null;
   show_staff?: {
-    assignment_type: string | null;
-    profiles: {
-      id: string;
-      display_name: string | null;
-    } | null;
-  }[];
+  assignment_type: string | null;
+  profiles: {
+    id: string;
+    display_name: string | null;
+  } | null;
+  external_crew: {
+    id: number;
+    display_name: string | null;
+  } | null;
+}[];
 };
 
 export default function TechnicalCrewAssignmentsReportPage() {
@@ -59,12 +63,16 @@ export default function TechnicalCrewAssignmentsReportPage() {
         venue_id,
         cancelled,
         show_staff (
-          assignment_type,
-          profiles (
-            id,
-            display_name
-          )
-        )
+  assignment_type,
+  profiles (
+    id,
+    display_name
+  ),
+  external_crew (
+    id,
+    display_name
+  )
+)
       `)
       .eq("cancelled", false)
       .order("date_time", { ascending: true });
@@ -120,13 +128,15 @@ export default function TechnicalCrewAssignmentsReportPage() {
     setTechnicalUsers(technicalOnly);
   }
 
-  function getTechnicalCrew(show: ShowRow) {
-    return (
-      show.show_staff?.filter(
-        (assignment) => assignment.assignment_type === "technical"
-      ) || []
-    );
-  }
+ function getTechnicalCrew(show: ShowRow) {
+  return (
+    show.show_staff?.filter(
+      (assignment) =>
+        assignment.assignment_type === "technical" &&
+        (assignment.profiles || assignment.external_crew)
+    ) || []
+  );
+}
 
   const filteredShows = useMemo(() => {
     return shows.filter((show) => {
@@ -137,11 +147,14 @@ export default function TechnicalCrewAssignmentsReportPage() {
         searchValue === "" ||
         show.name?.toLowerCase().includes(searchValue) ||
         show.venue?.toLowerCase().includes(searchValue) ||
-        technicalCrew.some((assignment) =>
-          assignment.profiles?.display_name
-            ?.toLowerCase()
-            .includes(searchValue)
-        );
+        technicalCrew.some((assignment) => {
+  const name =
+    assignment.profiles?.display_name ||
+    assignment.external_crew?.display_name ||
+    "";
+
+  return name.toLowerCase().includes(searchValue);
+});
 
       const matchesVenue =
         venueFilter === "all" || String(show.venue_id) === venueFilter;
@@ -400,12 +413,23 @@ export default function TechnicalCrewAssignmentsReportPage() {
                             </span>
                           ) : (
                             <div className="space-y-1">
-                              {technicalCrew.map((assignment, index) => (
-                                <div key={index}>
-                                  {assignment.profiles?.display_name ||
-                                    "Unknown"}
-                                </div>
-                              ))}
+                              {technicalCrew.map((assignment, index) => {
+  const name =
+    assignment.profiles?.display_name ||
+    assignment.external_crew?.display_name ||
+    "Unknown";
+
+  const source = assignment.external_crew ? "External" : "User";
+
+  return (
+    <div key={index}>
+      {name}{" "}
+      <span className="text-xs text-zinc-500">
+        ({source})
+      </span>
+    </div>
+  );
+})}
                             </div>
                           )}
                         </td>

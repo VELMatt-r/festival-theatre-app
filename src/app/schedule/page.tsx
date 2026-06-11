@@ -57,7 +57,11 @@ export default function SchedulePage() {
           profiles (
             display_name,
             department
-          )
+          ),
+          external_crew (
+            display_name,
+            department
+            )
         ),
         show_foh_staffing (
           role_label,
@@ -81,9 +85,11 @@ export default function SchedulePage() {
             )
             .map((assignment: any) => ({
               name:
-                assignment.profiles?.display_name || "Unknown",
+                assignment.profiles?.display_name || 
+                assignment.external_crew?.display_name || "Unknown",
               department:
-                assignment.profiles?.department || "Technical",
+                assignment.profiles?.department || 
+                assignment.external_crew?.display_name || "Technical",
               assignmentType: "technical",
             })) || [];
 

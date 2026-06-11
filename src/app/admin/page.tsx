@@ -59,6 +59,16 @@ export default function AdminPage() {
               Manage venue records, technical contacts and operational notes.
               </p>
         </Link>
+        <Link
+  href="/admin/external-crew"
+  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-indigo-500"
+>
+  <h2 className="text-xl font-semibold">External Crew</h2>
+
+  <p className="mt-2 text-sm text-zinc-400">
+    Manage regular crew members who do not need login accounts.
+  </p>
+</Link>
         </div>
       </div>
     </AppLayout>

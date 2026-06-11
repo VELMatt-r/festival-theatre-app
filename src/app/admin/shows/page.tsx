@@ -78,6 +78,8 @@ export default function AdminShowsPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingShowId, setEditingShowId] = useState<number | null>(null);
   const [documentActivity, setDocumentActivity] = useState<any[]>([]);
+  const [externalCrew, setExternalCrew] = useState<any[]>([]);
+  const [assignedExternalCrewIds, setAssignedExternalCrewIds] = useState<number[]>([]);
 
   const emptyForm: ShowForm = {
     name: "",
@@ -101,6 +103,7 @@ export default function AdminShowsPage() {
   const [editShow, setEditShow] = useState<ShowForm>(emptyForm);
 
   useEffect(() => {
+    loadExternalCrew();
     loadShows();
     loadStaff();
     loadVenues();
@@ -135,6 +138,21 @@ export default function AdminShowsPage() {
   setStaffMembers(data || []);
 }
 
+async function loadExternalCrew() {
+  const { data, error } = await supabase
+    .from("external_crew")
+    .select("*")
+    .eq("status", "active")
+    .order("display_name");
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  setExternalCrew(data || []);
+}
+
   async function loadVenues() {
     const { data, error } = await supabase
       .from("venues")
@@ -153,7 +171,7 @@ export default function AdminShowsPage() {
   async function loadAssignedStaff(showId: number) {
   const { data, error } = await supabase
     .from("show_staff")
-    .select("user_id")
+    .select("user_id, external_crew_id")
     .eq("show_id", showId)
     .eq("assignment_type", "technical");
 
@@ -162,7 +180,15 @@ export default function AdminShowsPage() {
     return;
   }
 
-  setAssignedStaffIds(data?.map((item) => item.user_id) || []);
+  setAssignedStaffIds(
+    data?.filter((item) => item.user_id).map((item) => item.user_id) || []
+  );
+
+  setAssignedExternalCrewIds(
+    data
+      ?.filter((item) => item.external_crew_id)
+      .map((item) => item.external_crew_id) || []
+  );
 }
 
   async function loadFOHStaffing(showId: number) {
@@ -242,6 +268,43 @@ export default function AdminShowsPage() {
 
     setDocumentActivity(data || []);
   }
+
+  async function toggleExternalCrewAssignment(showId: number, externalCrewId: number) {
+  const isAssigned = assignedExternalCrewIds.includes(externalCrewId);
+
+  if (isAssigned) {
+    const { error } = await supabase
+      .from("show_staff")
+      .delete()
+      .eq("show_id", showId)
+      .eq("external_crew_id", externalCrewId)
+      .eq("assignment_type", "technical");
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setAssignedExternalCrewIds((prev) =>
+      prev.filter((id) => id !== externalCrewId)
+    );
+  } else {
+    const { error } = await supabase.from("show_staff").insert([
+      {
+        show_id: showId,
+        external_crew_id: externalCrewId,
+        assignment_type: "technical",
+      },
+    ]);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setAssignedExternalCrewIds((prev) => [...prev, externalCrewId]);
+  }
+}
 
   async function toggleStaffAssignment(showId: number, userId: string) {
   const isAssigned = assignedStaffIds.includes(userId);
@@ -452,6 +515,7 @@ export default function AdminShowsPage() {
               setCrewSearchTerm("");
               setFohStaffing([]);
               setShowAddForm(true);
+              setAssignedExternalCrewIds([]);
             }}
             className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
           >
@@ -536,6 +600,9 @@ export default function AdminShowsPage() {
         venues={venues}
         fohStaffing={fohStaffing}
         setFohStaffing={setFohStaffing}
+        externalCrew={externalCrew}
+        assignedExternalCrewIds={assignedExternalCrewIds}
+        toggleExternalCrewAssignment={toggleExternalCrewAssignment}
       />
 
       <ShowDialog
@@ -565,6 +632,9 @@ export default function AdminShowsPage() {
         venues={venues}
         fohStaffing={fohStaffing}
         setFohStaffing={setFohStaffing}
+        externalCrew={externalCrew}
+        assignedExternalCrewIds={assignedExternalCrewIds}
+        toggleExternalCrewAssignment={toggleExternalCrewAssignment}
       />
     </AppLayout>
   );
@@ -597,6 +667,9 @@ function ShowDialog({
   venues,
   fohStaffing,
   setFohStaffing,
+  externalCrew,
+  assignedExternalCrewIds,
+  toggleExternalCrewAssignment,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -624,6 +697,12 @@ function ShowDialog({
   venues: any[];
   fohStaffing: FOHStaffingAssignment[];
   setFohStaffing: React.Dispatch<React.SetStateAction<FOHStaffingAssignment[]>>;
+  externalCrew: any[];
+  assignedExternalCrewIds: number[];
+  toggleExternalCrewAssignment: (
+  showId: number,
+  externalCrewId: number
+) => Promise<void>;
 }) {
   const activeCrewMembers = crewMembers.filter(
   (crew) => crew.disabled !== true
@@ -652,6 +731,25 @@ function ShowDialog({
   const availableCrew = technicalCrew.filter(
     (crew) => !assignedCrewIds.includes(crew.id)
   );
+const technicalExternalCrew = externalCrew.filter((crew) => {
+  const search = crewSearchTerm.toLowerCase();
+
+  const matchesSearch =
+    crew.display_name?.toLowerCase().includes(search) ||
+    crew.job_roles?.some((role: string) =>
+      role.toLowerCase().includes(search)
+    );
+
+  return crew.department === "Technical" && matchesSearch;
+});
+
+const assignedExternalCrew = technicalExternalCrew.filter((crew) =>
+  assignedExternalCrewIds.includes(crew.id)
+);
+
+const availableExternalCrew = technicalExternalCrew.filter(
+  (crew) => !assignedExternalCrewIds.includes(crew.id)
+);
 
   function updateFOHStaffing(
     roleKey: string,
@@ -930,9 +1028,42 @@ function ShowDialog({
               )}
 
               <div className="grid gap-6 md:grid-cols-2">
-                <CrewList title={`Assigned Technical Crew (${assignedCrew.length})`} hint="Click to remove" crew={assignedCrew} assigned editingShowId={editingShowId} toggleCrewAssignment={toggleCrewAssignment} />
-                <CrewList title={`Available Technical Crew (${availableCrew.length})`} hint="Click to assign" crew={availableCrew} assigned={false} editingShowId={editingShowId} toggleCrewAssignment={toggleCrewAssignment} />
-              </div>
+ <CrewList
+    title={`Assigned User Crew (${assignedCrew.length})`}
+    hint="Click to remove"
+    crew={assignedCrew}
+    assigned
+    editingShowId={editingShowId}
+    toggleCrewAssignment={toggleCrewAssignment}
+  />
+
+  <CrewList
+    title={`Available User Crew (${availableCrew.length})`}
+    hint="Click to assign"
+    crew={availableCrew}
+    assigned={false}
+    editingShowId={editingShowId}
+    toggleCrewAssignment={toggleCrewAssignment}
+  />
+
+  <ExternalCrewList
+    title={`Assigned External Crew (${assignedExternalCrew.length})`}
+    hint="Click to remove"
+    crew={assignedExternalCrew}
+    assigned
+    editingShowId={editingShowId}
+    toggleExternalCrewAssignment={toggleExternalCrewAssignment}
+  />
+
+  <ExternalCrewList
+    title={`Available External Crew (${availableExternalCrew.length})`}
+    hint="Click to assign"
+    crew={availableExternalCrew}
+    assigned={false}
+    editingShowId={editingShowId}
+    toggleExternalCrewAssignment={toggleExternalCrewAssignment}
+  />
+</div>
             </div>
           </TabsContent>
 
@@ -1004,7 +1135,16 @@ function ShowDialog({
                 <h3 className="font-semibold text-white">Upload Document</h3>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Document name" className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white" />
-                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white" />
+                  <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  console.log("Selected file:", file);
+                  setSelectedFile(file);
+                  }}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+                />
                 </div>
                 <button type="button" disabled={!editingShowId || !selectedFile || uploadingDocument} onClick={uploadDocument} className="mt-4 rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
                   {uploadingDocument ? "Uploading..." : "Upload Document"}
@@ -1078,6 +1218,56 @@ function TimeOnlyField({
         className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
       />
     </Field>
+  );
+}
+function ExternalCrewList({
+  title,
+  hint,
+  crew,
+  assigned,
+  editingShowId,
+  toggleExternalCrewAssignment,
+}: {
+  title: string;
+  hint: string;
+  crew: any[];
+  assigned: boolean;
+  editingShowId: number | null;
+  toggleExternalCrewAssignment: (
+    showId: number,
+    externalCrewId: number
+  ) => Promise<void>;
+}) {
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-3">
+        <h3 className={`font-semibold ${assigned ? "text-green-400" : "text-white"}`}>
+          {title}
+        </h3>
+        <p className="text-sm text-zinc-500">{hint}</p>
+      </div>
+
+      <div className="space-y-3">
+        {crew.map((member) => (
+          <CrewCard
+            key={member.id}
+            crew={member}
+            assigned={assigned}
+            disabled={!editingShowId}
+            onClick={() => {
+              if (!editingShowId) return;
+              toggleExternalCrewAssignment(editingShowId, member.id);
+            }}
+          />
+        ))}
+
+        {crew.length === 0 && (
+          <p className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
+            No external crew found.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -48,16 +48,20 @@ export default function ShowDetailsPage() {
     setShow(showData);
 
     const { data: crewData, error: crewError } = await supabase
-      .from("show_staff")
-      .select(`
-        assignment_type,
-        profiles (
-          display_name,
-          department
-        )
-      `)
-      .eq("show_id", id)
-      .eq("assignment_type", "technical");
+  .from("show_staff")
+  .select(`
+    assignment_type,
+    profiles (
+      display_name,
+      department
+    ),
+    external_crew (
+      display_name,
+      department
+    )
+  `)
+  .eq("show_id", id)
+  .eq("assignment_type", "technical");
 
     if (crewError) {
       console.error(crewError);
@@ -157,7 +161,8 @@ export default function ShowDetailsPage() {
                     key={index}
                     className="rounded-full bg-zinc-800 px-4 py-2 text-sm font-medium"
                   >
-                    {member.profiles?.display_name || "Unknown"}
+                    {member.profiles?.display_name ||
+                      member.external_crew?.display_name || "unknown"}
                   </span>
                 ))
               )}
