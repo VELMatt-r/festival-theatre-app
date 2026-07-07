@@ -106,7 +106,11 @@ export default function SchedulePage() {
         return {
           title: show.name,
           start: show.date_time,
+          display: "block",
+          backgroundColor: show.cancelled ? "#b91c1c" : undefined,
+          borderColor: show.cancelled ? "#991b1b" : undefined,
           extendedProps: {
+            cancelled: show.cancelled,
             venue: show.venue,
             crewCall: show.crew_call,
             showId: show.id,
@@ -148,6 +152,9 @@ export default function SchedulePage() {
           initialView="dayGridMonth"
           height="auto"
           events={events}
+          eventClassNames={(info) =>
+            info.event.extendedProps.cancelled ? ["cancelled-event"] : []
+          }
           headerToolbar={{
             left: "prev,next today",
             center: "title",

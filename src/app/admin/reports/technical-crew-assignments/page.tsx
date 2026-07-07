@@ -48,6 +48,16 @@ export default function TechnicalCrewAssignmentsReportPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  const printParams = new URLSearchParams({
+    search,
+    venue: venueFilter,
+    technicalUser: technicalUserFilter,
+    dateFrom,
+    dateTo,
+  });
+
+  const printUrl = `/admin/reports/technical-crew-assignments/print?${printParams.toString()}`;
+
   useEffect(() => {
     loadData();
   }, []);
@@ -233,7 +243,7 @@ export default function TechnicalCrewAssignmentsReportPage() {
             </Link>
 
             <Link
-                href="/admin/reports/technical-crew-assignments/print"
+                href={printUrl}
                 target="_blank"
                 className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
             >

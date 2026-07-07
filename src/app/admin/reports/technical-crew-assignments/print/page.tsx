@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type ShowRow = {
@@ -17,16 +18,44 @@ type ShowRow = {
       id: string;
       display_name: string | null;
     } | null;
+    external_crew?: {
+      id: number;
+      display_name: string | null;
+    } | null;
   }[];
 };
 
+type Venue = {
+  id: number;
+  name: string;
+};
+
+type TechnicalUser = {
+  id: string;
+  display_name: string | null;
+  department: string | null;
+  disabled: boolean | null;
+};
+
 export default function TechnicalCrewAssignmentsPrintPage() {
+  const searchParams = useSearchParams();
+
+  const search = searchParams.get("search") || "";
+  const venueFilter = searchParams.get("venue") || "all";
+  const technicalUserFilter = searchParams.get("technicalUser") || "all";
+  const dateFrom = searchParams.get("dateFrom") || "";
+  const dateTo = searchParams.get("dateTo") || "";
+
   const [shows, setShows] = useState<ShowRow[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [technicalUsers, setTechnicalUsers] = useState<TechnicalUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadShows() {
-      const { data, error } = await supabase
+      setLoading(true);
+
+      const { data: showsData, error: showsError } = await supabase
         .from("shows")
         .select(`
           id,
@@ -40,19 +69,51 @@ export default function TechnicalCrewAssignmentsPrintPage() {
             profiles (
               id,
               display_name
+            ),
+            external_crew (
+              id,
+              display_name
             )
           )
         `)
         .eq("cancelled", false)
         .order("date_time", { ascending: true });
 
-      if (error) {
-        console.error("Load technical crew assignments print report failed:", error);
+      if (showsError) {
+        console.error(
+          "Load technical crew assignments print report failed:",
+          showsError
+        );
         setLoading(false);
         return;
       }
 
-      setShows((data || []) as unknown as ShowRow[]);
+      setShows((showsData || []) as unknown as ShowRow[]);
+
+      const { data: venuesData, error: venuesError } = await supabase
+        .from("venues")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name", { ascending: true });
+
+      if (!venuesError) {
+        setVenues(venuesData || []);
+      }
+
+      const { data: usersData, error: usersError } = await supabase
+        .from("profiles")
+        .select("id, display_name, department, disabled")
+        .or("disabled.eq.false,disabled.is.null")
+        .order("display_name", { ascending: true });
+
+      if (!usersError) {
+        const technicalOnly = (usersData || []).filter((user: TechnicalUser) =>
+          user.department?.toLowerCase().includes("technical")
+        );
+
+        setTechnicalUsers(technicalOnly);
+      }
+
       setLoading(false);
     }
 
@@ -62,16 +123,77 @@ export default function TechnicalCrewAssignmentsPrintPage() {
   function getTechnicalCrew(show: ShowRow) {
     return (
       show.show_staff?.filter(
-        (assignment) => assignment.assignment_type === "technical"
+        (assignment) =>
+          assignment.assignment_type === "technical" &&
+          (assignment.profiles || assignment.external_crew)
       ) || []
     );
   }
 
+  const filteredShows = useMemo(() => {
+    return shows.filter((show) => {
+      const searchValue = search.toLowerCase();
+      const technicalCrew = getTechnicalCrew(show);
+
+      const matchesSearch =
+        searchValue === "" ||
+        show.name?.toLowerCase().includes(searchValue) ||
+        show.venue?.toLowerCase().includes(searchValue) ||
+        technicalCrew.some((assignment) => {
+          const name =
+            assignment.profiles?.display_name ||
+            assignment.external_crew?.display_name ||
+            "";
+
+          return name.toLowerCase().includes(searchValue);
+        });
+
+      const matchesVenue =
+        venueFilter === "all" || String(show.venue_id) === venueFilter;
+
+      const matchesTechnicalUser =
+        technicalUserFilter === "all" ||
+        technicalCrew.some(
+          (assignment) => assignment.profiles?.id === technicalUserFilter
+        );
+
+      const showDate = show.date_time ? new Date(show.date_time) : null;
+
+      const matchesDateFrom =
+        !dateFrom ||
+        (showDate && showDate >= new Date(`${dateFrom}T00:00:00`));
+
+      const matchesDateTo =
+        !dateTo ||
+        (showDate && showDate <= new Date(`${dateTo}T23:59:59`));
+
+      return (
+        matchesSearch &&
+        matchesVenue &&
+        matchesTechnicalUser &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+  }, [shows, search, venueFilter, technicalUserFilter, dateFrom, dateTo]);
+
   const totalAssignments = useMemo(() => {
-    return shows.reduce((total, show) => {
+    return filteredShows.reduce((total, show) => {
       return total + getTechnicalCrew(show).length;
     }, 0);
-  }, [shows]);
+  }, [filteredShows]);
+
+  const selectedVenueName =
+    venueFilter === "all"
+      ? "All venues"
+      : venues.find((venue) => String(venue.id) === venueFilter)?.name ||
+        "Selected venue";
+
+  const selectedTechnicalUserName =
+    technicalUserFilter === "all"
+      ? "All Technical Crew"
+      : technicalUsers.find((user) => user.id === technicalUserFilter)
+          ?.display_name || "Selected technical crew";
 
   if (loading) {
     return <main className="p-10">Loading report...</main>;
@@ -112,7 +234,9 @@ export default function TechnicalCrewAssignmentsPrintPage() {
               />
               <PrintMeta
                 label="Shows"
-                value={`${shows.length} show${shows.length === 1 ? "" : "s"}`}
+                value={`${filteredShows.length} show${
+                  filteredShows.length === 1 ? "" : "s"
+                }`}
               />
               <PrintMeta
                 label="Assignments"
@@ -129,11 +253,14 @@ export default function TechnicalCrewAssignmentsPrintPage() {
         <div className="space-y-8 px-10 py-8 print:px-8">
           <div className="mx-auto max-w-5xl space-y-8">
             <PrintSection title="Selected Filters">
-              <PrintRow label="Date From" value="All dates" />
-              <PrintRow label="Date To" value="All dates" />
-              <PrintRow label="Venue" value="All venues" />
-              <PrintRow label="Technical Crew" value="All Technical Crew" />
-              <PrintRow label="Search" value="None" />
+              <PrintRow label="Date From" value={dateFrom ? formatFilterDate(dateFrom) : "All dates"} />
+              <PrintRow label="Date To" value={dateTo ? formatFilterDate(dateTo) : "All dates"} />
+              <PrintRow label="Venue" value={selectedVenueName} />
+              <PrintRow
+                label="Technical Crew"
+                value={selectedTechnicalUserName}
+              />
+              <PrintRow label="Search" value={search || "None"} />
             </PrintSection>
 
             <PrintSection title="Report Results">
@@ -160,7 +287,7 @@ export default function TechnicalCrewAssignmentsPrintPage() {
                   </thead>
 
                   <tbody>
-                    {shows.length === 0 ? (
+                    {filteredShows.length === 0 ? (
                       <tr>
                         <td
                           colSpan={5}
@@ -170,7 +297,7 @@ export default function TechnicalCrewAssignmentsPrintPage() {
                         </td>
                       </tr>
                     ) : (
-                      shows.map((show) => {
+                      filteredShows.map((show) => {
                         const technicalCrew = getTechnicalCrew(show);
 
                         return (
@@ -201,12 +328,14 @@ export default function TechnicalCrewAssignmentsPrintPage() {
                                 </span>
                               ) : (
                                 <div className="space-y-1">
-                                  {technicalCrew.map((assignment, index) => (
-                                    <div key={index}>
-                                      {assignment.profiles?.display_name ||
-                                        "Unknown"}
-                                    </div>
-                                  ))}
+                                  {technicalCrew.map((assignment, index) => {
+                                    const name =
+                                      assignment.profiles?.display_name ||
+                                      assignment.external_crew?.display_name ||
+                                      "Unknown";
+
+                                    return <div key={index}>{name}</div>;
+                                  })}
                                 </div>
                               )}
                             </td>
@@ -305,4 +434,9 @@ function formatTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+function formatFilterDate(value: string) {
+  const [year, month, day] = value.split("-");
+
+  return `${day}/${month}/${year}`;
 }
