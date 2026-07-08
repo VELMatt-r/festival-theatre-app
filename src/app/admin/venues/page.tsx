@@ -19,6 +19,7 @@ type Venue = {
   requires_opening_checks: boolean;
   status: string | null;
   technical_contact_name?: string;
+  calendar_colour: string | null;
 };
 type VenueDocument = {
     id: number;
@@ -43,6 +44,7 @@ export default function AdminVenuesPage() {
   const [status, setStatus] = useState("active");
   const [documents, setDocuments] = useState<VenueDocument[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [calendarColour, setCalendarColour] = useState("#6366f1");
 
   useEffect(() => {
     loadVenues();
@@ -81,6 +83,7 @@ async function loadVenueDocuments(venueId: number) {
     setAddress("");
     setRequiresOpeningChecks(false);
     setStatus("active");
+    setCalendarColour("#6366f1");
   }
 
   function openAddModal() {
@@ -95,6 +98,7 @@ async function loadVenueDocuments(venueId: number) {
     setRequiresOpeningChecks(venue.requires_opening_checks || false);
     setStatus(venue.status || "active");
     loadVenueDocuments(venue.id);
+    setCalendarColour(venue.calendar_colour || "#6366f1");
     setModalOpen(true);
   }
 
@@ -109,6 +113,7 @@ async function loadVenueDocuments(venueId: number) {
       address,
       requires_opening_checks: requiresOpeningChecks,
       status,
+      calendar_colour: calendarColour,
     };
 
     if (editingVenue) {
@@ -305,9 +310,18 @@ async function deleteDocument(document: VenueDocument) {
               >
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                      className="h-3 w-3 rounded-full"
+                      style={{
+                        backgroundColor: venue.calendar_colour || "#6366f1",
+                      }}
+                    />
+                      
                     <p className="text-lg font-semibold text-white">
                       {venue.name}
                     </p>
+                  </div>
 
                     <span
                       className={`rounded-full px-2 py-1 text-xs font-medium uppercase ${
@@ -395,6 +409,24 @@ async function deleteDocument(document: VenueDocument) {
     </span>
   </label>
 
+  <div className="rounded-x1 border border-zinc-800 bg-zinc-950 px-4 py-3 md:col-span-2">
+    <label className="mb-2 block text-sm text-zinc-400">
+      Calendar Colour
+    </label>
+
+    <div className="flex items-center gap-3">
+      <input
+        type="color"
+        value={calendarColour}
+        onChange={(event) => setCalendarColour(event.target.value)}
+        className="h-10 curosr-pointer rounded border border-Zinc-700 bg-zinc-900"
+    />
+
+    <span className="text-sm text-zinc-400">
+      {calendarColour}
+    </span>
+    </div>
+  </div>
   <select
     value={status}
     onChange={(event) => setStatus(event.target.value)}

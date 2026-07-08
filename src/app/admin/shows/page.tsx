@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { EVENT_TYPES, EventType } from "@/lib/eventStyles";
 
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
 
 type ShowForm = {
   name: string;
+  event_type: EventType;
   cancelled: boolean;
   date_time: Date | null;
   venue: string;
@@ -70,6 +72,8 @@ export default function AdminShowsPage() {
   const [fohStaffing, setFohStaffing] = useState<FOHStaffingAssignment[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [crewSearchTerm, setCrewSearchTerm] = useState("");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [venueFilter, setVenueFilter] = useState("all");
   const [documents, setDocuments] = useState<any[]>([]);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -83,6 +87,7 @@ export default function AdminShowsPage() {
 
   const emptyForm: ShowForm = {
     name: "",
+    event_type: "Show",
     cancelled: false,
     date_time: null,
     venue: "",
@@ -109,20 +114,26 @@ export default function AdminShowsPage() {
     loadVenues();
   }, []);
 
-  async function loadShows() {
-    const { data, error } = await supabase
-      .from("shows")
-      .select("*")
-      .order("date_time", { ascending: true });
+ async function loadShows() {
+  const { data, error } = await supabase
+    .from("shows")
+    .select(`
+      *,
+      venues (
+        id,
+        name,
+        calendar_colour
+      )
+    `)
+    .order("date_time", { ascending: true });
 
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    setShows(data || []);
+  if (error) {
+    console.error(error);
+    return;
   }
 
+  setShows(data || []);
+}
   async function loadStaff() {
   const { data, error } = await supabase
     .from("profiles")
@@ -347,6 +358,7 @@ async function loadExternalCrew() {
       .insert([
         {
           name: newShow.name,
+          event_type: newShow.event_type,
           cancelled: newShow.cancelled,
           date_time: formatLocalDateTime(newShow.date_time),
           venue: newShow.venue,
@@ -410,6 +422,7 @@ async function loadExternalCrew() {
 
     setEditShow({
       name: show.name || "",
+      event_type: show.event_type || "Show",
       cancelled: show.cancelled || false,
       date_time: show.date_time ? new Date(show.date_time) : null,
       venue: show.venue || "",
@@ -436,6 +449,7 @@ async function loadExternalCrew() {
       .from("shows")
       .update({
         name: editShow.name,
+        event_type: editShow.event_type,
         cancelled: editShow.cancelled,
         date_time: formatLocalDateTime(editShow.date_time),
         venue: editShow.venue,
@@ -491,84 +505,191 @@ async function loadExternalCrew() {
   const filteredShows = shows.filter((show) => {
     const search = searchTerm.toLowerCase();
 
-    return (
+    const matchesSearch =
       show.name?.toLowerCase().includes(search) ||
-      show.venue?.toLowerCase().includes(search)
-    );
+      show.venue?.toLowerCase().includes(search);
+
+    const matchesEventType = 
+      eventTypeFilter === "all" || show.event_type === eventTypeFilter;
+
+    const matchesVenue =
+      venueFilter === "all" || String(show.venue_id) === venueFilter;
+
+    return matchesSearch && matchesEventType && matchesVenue;
   });
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-wide text-zinc-400">
-              Admin
-            </p>
+<AppLayout>
+  <div className="space-y-6">
+   <div className="sticky top-0 z-40 -mx-6 -mt-6 space-y-4 border-b border-zinc-800 bg-zinc-950 px-6 pt-[92px] pb-5 shadow-xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-wide text-zinc-400">
+            Admin
+          </p>
 
-            <h1 className="mt-2 text-3xl font-bold">Manage Shows</h1>
-          </div>
-
-          <button
-            onClick={() => {
-              setAssignedStaffIds([]);
-              setCrewSearchTerm("");
-              setFohStaffing([]);
-              setShowAddForm(true);
-              setAssignedExternalCrewIds([]);
-            }}
-            className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
-          >
-            Add Show
-          </button>
+          <h1 className="mt-2 text-3xl font-bold">Manage Shows</h1>
         </div>
 
-        <input
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Search shows or venues..."
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+        <button
+          onClick={() => {
+            setAssignedStaffIds([]);
+            setCrewSearchTerm("");
+            setFohStaffing([]);
+            setShowAddForm(true);
+            setAssignedExternalCrewIds([]);
+          }}
+          className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
+        >
+          Add Show
+        </button>
+      </div>
+
+      <input
+        value={searchTerm}
+        onChange={(event) => setSearchTerm(event.target.value)}
+        placeholder="Search shows or venues..."
+        className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+      />
+
+      <div className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+        {Object.entries(EVENT_TYPES).map(([eventType, style]) => (
+          <button
+            type="button"
+            key={eventType}
+            onClick={() =>
+              setEventTypeFilter(
+                eventTypeFilter === eventType ? "all" : eventType
+              )
+            }
+            className={`flex items-center gap-2 rounded-xl border border-zinc-700 px-3 py-2 text-sm event-pattern-${style.pattern} ${
+              eventTypeFilter === eventType
+                ? "border-white ring-2 ring-white/30"
+                : "border-zinc-700"
+            }`}
+          >
+            <span className="font-medium text-white">
+              {eventType}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">       
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Venues
+            </p>
+
+  <div className="flex flex-wrap gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+    {venues.map((venue) => (
+      <button
+        type="button"
+        key={venue.id}
+        onClick={() =>
+          setVenueFilter(
+            venueFilter === String(venue.id) ? "all" : String(venue.id)
+          )
+        }
+        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+          venueFilter === String(venue.id)
+            ? "border-white ring-2 ring-white/30"
+            : "border-zinc-700"
+        }`}
+      >
+        <span
+          className="h-2.5 w-2.5 rounded-full"
+          style={{
+            backgroundColor: venue.calendar_colour || "#6366f1",
+          }}
         />
 
+        <span className="text-sm text-white">{venue.name}</span>
+      </button>
+    ))}
+  </div>
+</div>
+      </div>
+    </div>
+
+    {/* Your shows section goes below here */}
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="space-y-3">
-            {filteredShows.map((show) => (
+            {filteredShows.map((show) => {
+              const eventType =
+              (show.event_type as EventType) || "Show";
+              
+              const eventStyle = EVENT_TYPES[eventType];
+              const patternClass = `event-pattern-${eventStyle.pattern}`;
+              
+              return (
               <div
-                key={show.id}
-                className="flex items-center justify-between rounded-xl bg-zinc-800 p-4"
+              key={show.id}
+              className={`flex items-center justify-between rounded-xl border p-4 ${
+                show.cancelled
+                ? "border-red-800 bg-red-950/80"
+                : `border-zinc-700 ${patternClass}`
+              }`}
               >
                 <div>
-                  <p className="font-semibold">{show.name}</p>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor:
+                        show.venues?.calendar_colour || "#6366f1",
+                      }}
+                      />
+                  
+                    <p className={`font-semibold ${
+                      show.cancelled
+                      ? "text-zinc-300 line-through"
+                      : "text-white"
+                    }`}
+                    >
+                      {show.name}
+                    </p>
+                  </div>
 
-                  <p className="text-sm text-zinc-400">
-                    {new Date(show.date_time).toLocaleString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
-                    · {show.venue}
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    <p className={`text-sm ${ show.cancelled ? "text-zinc-500" : "text-zinc-400"}`}>
+                      {new Date(show.date_time).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        })}{" "}
+                      •{" "}
+                      {new Date(show.date_time).toLocaleTimeString("en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        })}
+                    </p>
+                      
+                    <p className={`text-sm ${ show.cancelled ? "text-zinc-500" : "text-zinc-400" }`}>
+                      {show.venue || "No venue set"}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex overflow-hidden rounded-xl border border-white/10 bg-black/20">
                   <Link
                     href={`/shows/${show.id}`}
-                    className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium transition hover:bg-zinc-600"
+                    className="px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10"
                   >
                     View
                   </Link>
-
+                
                   <button
+                    type="button"
                     onClick={() => openEditForm(show)}
-                    className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium transition hover:bg-zinc-600"
+                    className="border-l border-white/10 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10"
                   >
                     Edit
                   </button>
-                </div>
+                  </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
@@ -638,7 +759,6 @@ async function loadExternalCrew() {
       />
     </AppLayout>
   );
-}
 
 function ShowDialog({
   open,
@@ -902,95 +1022,172 @@ const availableExternalCrew = technicalExternalCrew.filter(
   </TabsList>
 </div>
 
-          <TabsContent value="show">
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <Field label="Show Name">
-                <input
-                  placeholder="Show Name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-                />
-              </Field>
+         <TabsContent value="show">
+  <div className="mt-6 space-y-6">
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+      <h3 className="mb-4 text-lg font-semibold text-white">
+        Event Details
+      </h3>
 
-              <Field label="Show Cancelled">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, cancelled: !form.cancelled })}
-                  className="flex h-[50px] w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-left"
-                >
-                  <span className="text-sm text-zinc-300">
-                    {form.cancelled ? "Cancelled" : "Active"}
-                  </span>
-                  <span className={`relative h-6 w-11 rounded-full transition ${form.cancelled ? "bg-red-500" : "bg-zinc-700"}`}>
-                    <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${form.cancelled ? "left-6" : "left-1"}`} />
-                  </span>
-                </button>
-              </Field>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <Field label="Show Name">
+            <input
+              placeholder="Show Name"
+              value={form.name}
+              onChange={(e) =>
+                setForm({ ...form, name: e.target.value })
+              }
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+            />
+          </Field>
+        </div>
 
-              <Field label="Show Date & Time">
-                <DatePicker
-                  selected={form.date_time}
-                  onChange={(date: Date | null) => setForm({ ...form, date_time: date })}
-                  showTimeSelect
-                  timeFormat="HH:mm"
-                  timeIntervals={15}
-                  dateFormat="dd MMM yyyy HH:mm"
-                  placeholderText="Select date and time"
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-                />
-              </Field>
+        <Field label="Event Type">
+          <select
+            value={form.event_type}
+            onChange={(e) =>
+              setForm({ ...form, event_type: e.target.value as EventType})
+            }
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+          >
+            <option className="bg-zinc-900 text-white" value="Show">Show</option>
+            <option className="bg-zinc-900 text-white" value="Rehearsal">Rehearsal</option>
+            <option className="bg-zinc-900 text-white" value="Get-in">Get-in</option>
+            <option className="bg-zinc-900 text-white" value="Get-out">Get-out</option>
+            <option className="bg-zinc-900 text-white" value="Maintenance">Maintenance</option>
+            <option className="bg-zinc-900 text-white" value="Site Visit">Site Visit</option>
+          </select>
+        </Field>
 
-              <Field label="Venue">
-                <select
-                  value={form.venue_id || ""}
-                  onChange={(e) => {
-                    const selectedVenue = venues.find(
-                      (venue) => venue.id === Number(e.target.value)
-                    );
+        <Field label="Venue">
+          <select
+            value={form.venue_id || ""}
+            onChange={(e) => {
+              const selectedVenue = venues.find(
+                (venue) => venue.id === Number(e.target.value)
+              );
 
-                    setForm({
-                      ...form,
-                      venue_id: selectedVenue?.id || null,
-                      venue: selectedVenue?.name || "",
-                    });
-                  }}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-                >
-                  <option value="">Select Venue</option>
-                  {venues.map((venue) => (
-                    <option key={venue.id} value={venue.id}>
-                      {venue.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              setForm({
+                ...form,
+                venue_id: selectedVenue?.id || null,
+                venue: selectedVenue?.name || "",
+              });
+            }}
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+          >
+            <option className="bg-zinc-900 text-white" value="">
+              Select Venue
+            </option>
 
-              <Field label="Crew Call">
-                <DatePicker
-                  selected={form.crew_call ? new Date(`1970-01-01T${form.crew_call}`) : null}
-                  onChange={(date: Date | null) => {
-                    if (!date) return;
-                    const hours = String(date.getHours()).padStart(2, "0");
-                    const minutes = String(date.getMinutes()).padStart(2, "0");
-                    setForm({ ...form, crew_call: `${hours}:${minutes}` });
-                  }}
-                  showTimeSelect
-                  showTimeSelectOnly
-                  timeIntervals={15}
-                  timeCaption="Time"
-                  dateFormat="HH:mm"
-                  placeholderText="Select crew call"
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-                />
-              </Field>
-            </div>
-          </TabsContent>
+            {venues.map((venue) => (
+              <option
+                className="bg-zinc-900 text-white"
+                key={venue.id}
+                value={venue.id}
+              >
+                {venue.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+    </section>
+
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+      <h3 className="mb-4 text-lg font-semibold text-white">
+        Timing
+      </h3>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Field label="Show Date & Time">
+          <DatePicker
+            selected={form.date_time}
+            onChange={(date: Date | null) =>
+              setForm({ ...form, date_time: date })
+            }
+            showTimeSelect
+            timeFormat="HH:mm"
+            timeIntervals={15}
+            dateFormat="dd MMM yyyy HH:mm"
+            placeholderText="Select date and time"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+          />
+        </Field>
+
+        <Field label="Running Time">
+          <input
+            value={form.running_time}
+            onChange={(e) =>
+              setForm({ ...form, running_time: e.target.value })
+            }
+            placeholder="45 - 20 - 45"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+          />
+        </Field>
+
+        <Field label="Crew Call">
+          <DatePicker
+            selected={
+              form.crew_call
+                ? new Date(`1970-01-01T${form.crew_call}`)
+                : null
+            }
+            onChange={(date: Date | null) => {
+              if (!date) return;
+              const hours = String(date.getHours()).padStart(2, "0");
+              const minutes = String(date.getMinutes()).padStart(2, "0");
+              setForm({ ...form, crew_call: `${hours}:${minutes}` });
+            }}
+            showTimeSelect
+            showTimeSelectOnly
+            timeIntervals={15}
+            timeCaption="Time"
+            dateFormat="HH:mm"
+            placeholderText="Select crew call"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
+          />
+        </Field>
+      </div>
+    </section>
+
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+      <h3 className="mb-4 text-lg font-semibold text-white">
+        Status
+      </h3>
+
+      <Field label="Show Cancelled">
+        <button
+          type="button"
+          onClick={() =>
+            setForm({ ...form, cancelled: !form.cancelled })
+          }
+          className="flex h-[50px] w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-left md:max-w-sm"
+        >
+          <span className="text-sm text-zinc-300">
+            {form.cancelled ? "Cancelled" : "Active"}
+          </span>
+
+          <span
+            className={`relative h-6 w-11 rounded-full transition ${
+              form.cancelled ? "bg-red-500" : "bg-zinc-700"
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
+                form.cancelled ? "left-6" : "left-1"
+              }`}
+            />
+          </span>
+        </button>
+      </Field>
+    </section>
+  </div>
+</TabsContent>
 
           <TabsContent value="company">
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <TimeOnlyField label="Arrival Time" value={form.arrival_time} onChange={(value) => setForm({ ...form, arrival_time: value })} />
-              <Field label="Running Time"><input value={form.running_time} onChange={(e) => setForm({ ...form, running_time: e.target.value })} placeholder="45 - 20 - 45" className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white" /></Field>
               <Field label="Contact Name"><input value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} placeholder="Alex Morgan" className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white" /></Field>
               <Field label="Contact Role"><input value={form.contact_role} onChange={(e) => setForm({ ...form, contact_role: e.target.value })} placeholder="Tour Manager" className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white" /></Field>
               <Field label="Phone Number"><input value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} placeholder="07700 900123" className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white" /></Field>
@@ -1388,4 +1585,4 @@ function formatLocalDateTime(date: Date | null) {
   const minutes = String(date.getMinutes()).padStart(2, "0");
 
   return `${year}-${month}-${day}T${hours}:${minutes}:00`;
-}
+}}

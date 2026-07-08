@@ -1,0 +1,89 @@
+.fc-event {
+  border: none !important;
+  padding: 4px 6px !important;
+  border-radius: 8px !important;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.fc-event.cancelled-event {
+  background: #b91c1c !important;
+  border: 1px solid #991b1b !important;
+}
+
+.fc-event.cancelled-event .fc-daygrid-event-dot {
+  display: none !important;
+}
+
+.fc-event.cancelled-event .fc-event-title,
+.fc-event.cancelled-event .fc-event-time {
+  text-decoration: line-through !important;
+  color: #ffffff !important;
+}
+
+.fc-event:hover {
+  transform: scale(1.03);
+  opacity: 0.9;
+}
+
+.fc-event-title {
+  font-weight: 600;
+}
+
+.fc-event-time {
+  font-weight: 500;
+}
+
+.fc-col-header-cell {
+  background: #18181b;
+  border-color: #3f3f46 !important;
+}
+
+.fc-col-header-cell-cushion {
+  color: #d4d4d8 !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  padding: 10px 0;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: #3f3f46 !important;
+}
+
+.fc-scrollgrid {
+  border-color: #3f3f46 !important;
+}
+
+.fc-daygrid-day-number {
+  color: #d4d4d8;
+  text-decoration: none !important;
+  font-weight: 500;
+}
+
+.fc .fc-day-today {
+  background: rgba(225, 49, 111, 0.12) !important;
+}
+
+.fc .fc-button-primary {
+  background: #27272a !important;
+  border: 1px solid #3f3f46 !important;
+  color: white !important;
+}
+
+.fc .fc-button-primary:hover {
+  background: #3f3f46 !important;
+}
+
+.fc .fc-button-primary.fc-button-active {
+  background: #e1316f !important;
+  border-color: #e1316f !important;
+}
+
+.fc-toolbar-title {
+  color: white;
+  font-size: 1.5rem !important;
+  font-weight: 700;
+}

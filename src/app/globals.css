@@ -1,3 +1,5 @@
+@import "../styles/event-patterns.css";
+@import "../styles/fullcalendar.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -127,49 +129,4 @@
   html {
     @apply font-sans;
   }
-}
-.fc-event {
-  border: none !important;
-  background: linear-gradient(
-    135deg,
-    #6366f1,
-    #4f46e5
-  );
-
-  padding: 4px 6px !important;
-  border-radius: 8px !important;
-
-  cursor: pointer;
-
-  transition:
-    transform 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.fc-event.cancelled-event {
-  background: #b91c1c !important;
-  border: 1px solid #991b1b !important;
-}
-
-.fc-event.cancelled-event .fc-daygrid-event-dot {
-  display: none !important;
-}
-
-.fc-event.cancelled-event .fc-event-title,
-.fc-event.cancelled-event .fc-event-time {
-  text-decoration: line-through !important;
-  color: #ffffff !important;
-}
-
-.fc-event:hover {
-  transform: scale(1.03);
-  opacity: 0.9;
-}
-
-.fc-event-title {
-  font-weight: 600;
-}
-
-.fc-event-time {
-  font-weight: 500;
 }

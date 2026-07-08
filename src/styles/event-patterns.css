@@ -1,0 +1,56 @@
+.event-pattern-none {
+  background-color: rgb(39 39 42);
+}
+
+.event-pattern-diagonal {
+  background-color: rgb(39 39 42);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(59,130,246,.4) 0,
+    rgba(59,130,246,.4) 2px,
+    transparent 2px,
+    transparent 10px
+  );
+}
+
+.event-pattern-wideDiagonal {
+  background-color: rgb(39 39 42);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(34,197,94,.12) 0,
+    rgba(34,197,94,.12) 4px,
+    transparent 4px,
+    transparent 16px
+  );
+}
+
+.event-pattern-wideDiagonalReverse {
+  background-color: rgb(39 39 42);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(197, 34, 34, 0.2) 0,
+    rgba(197, 34, 34, 0.2) 4px,
+    transparent 4px,
+    transparent 16px
+  );
+}
+
+.event-pattern-hazard {
+  background-color: rgb(39 39 42);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 170, 0, 0.12) 0,
+    rgba(255, 170, 0, 0.12) 8px,
+    transparent 8px,
+    transparent 18px
+  );
+}
+
+.event-pattern-dots {
+  background-color: rgb(39 39 42);
+  background-image: radial-gradient(
+    rgba(168,85,247,.8) 1px,
+    transparent 1px
+  );
+  background-size: 12px 12px;
+}
