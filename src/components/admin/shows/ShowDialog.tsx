@@ -7,6 +7,7 @@ import {
 
 import {
   Tabs,
+  TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ import VisitingCompanyTab from "./VisitingCompanyTab";
 import TechnicalCrewTab from "./TechnicalCrewTab";
 import FOHStaffingTab from "./FOHStaffingTab";
 import DocumentsTab from "./DocumentsTab";
+import EventsTab from "./EventsTab";
 
 import type { ShowDialogProps } from "./ShowDialog.types";
 import { useCrewAssignments } from "./useCrewAssignments";
@@ -25,6 +27,7 @@ import { uploadShowDocument } from "./documentActions";
 import type {
   ShowForm,
   FOHStaffingAssignment,
+  ShowEventForm,
 } from "./types";
 
 
@@ -47,6 +50,9 @@ export default function ShowDialog({
   setForm,
   onSave,
   saveLabel,
+
+  events,
+  setEvents,
 
   crewMembers,
   assignedCrewIds,
@@ -126,6 +132,8 @@ export default function ShowDialog({
 
           <ShowTab form={form} setForm={setForm} venues={venues}/>
 
+          <EventsTab events={events} setEvents={setEvents}/>
+
           <VisitingCompanyTab form={form} setForm={setForm} />
 
           <NotesTab form={form} setForm={setForm} />
@@ -194,6 +202,10 @@ function TabNavigation() {
       <TabsList className="flex h-auto w-max min-w-full gap-1 rounded-xl bg-zinc-800 p-1">
         <TabsTrigger value="show" className={TAB_TRIGGER_CLASS}>
           Show
+        </TabsTrigger>
+
+        <TabsTrigger value="events" className={TAB_TRIGGER_CLASS}>
+          Events
         </TabsTrigger>
 
         <TabsTrigger value="company" className={TAB_TRIGGER_CLASS}>

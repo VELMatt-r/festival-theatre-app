@@ -30,3 +30,26 @@ export type FOHStaffingAssignment = {
   staff_name: string;
   notes: string;
 };
+
+export type ShowEventForm = {
+  id?: number;
+  title: string;
+  event_type: EventType;
+  start_time: Date | null;
+  end_time: Date | null;
+  crew_call: string;
+  report_type: "Technical" | "FOH" | "Both" | "None";
+  cancelled: boolean;
+  notes: string;
+};
+
+export const emptyShowEvent: ShowEventForm = {
+  title: "",
+  event_type: "Show",
+  start_time: null,
+  end_time: null,
+  crew_call: "",
+  report_type: "Both",
+  cancelled: false,
+  notes: "",
+};

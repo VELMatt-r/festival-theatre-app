@@ -9,9 +9,16 @@ import ShowDialog from "@/components/admin/shows/ShowDialog";
 import { supabase } from "@/lib/supabase";
 import { EVENT_TYPES, EventType } from "@/lib/eventStyles";
 
+import {
+  createShowEvents,
+  loadShowEvents,
+  replaceShowEvents,
+} from "@/components/admin/shows/eventActions";
+
 import type {
   ShowForm,
   FOHStaffingAssignment,
+  ShowEventForm,
 } from "@/components/admin/shows/types";
 
 // =====================================================
@@ -66,6 +73,7 @@ export default function AdminShowsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingShowId, setEditingShowId] = useState<number | null>(null);
+  const [showEvents, setShowEvents] = useState<ShowEventForm[]>([]);
 
   const [newShow, setNewShow] = useState<ShowForm>(emptyForm);
   const [editShow, setEditShow] = useState<ShowForm>(emptyForm);
@@ -252,6 +260,7 @@ export default function AdminShowsPage() {
     setAssignedStaffIds([]);
     setAssignedExternalCrewIds([]);
     setFohStaffing([]);
+    setShowEvents([]);
     setDocuments([]);
     setDocumentActivity([]);
     setSelectedFile(null);
@@ -274,6 +283,16 @@ export default function AdminShowsPage() {
     loadFOHStaffing(show.id);
     loadDocuments(show.id);
     loadDocumentActivity(show.id);
+    loadShowEvents(show.id)
+      .then(setShowEvents)
+      .catch((error) => {
+        console.error(error);
+        alert(
+          error instanceof Error
+          ? error.message
+          : "Failed to load show events."
+        );
+      });
 
     setEditShow({
       name: show.name || "",
@@ -375,37 +394,15 @@ export default function AdminShowsPage() {
     ]);
   }
 
-  async function createDefaultShowEvent(showId: number) {
-    if (!newShow.date_time) return;
-
-    const { error } = await supabase.from("show_events").insert([
-      {
-        show_id: showId,
-        event_type: "Show",
-        start_time: formatLocalDateTime(newShow.date_time),
-        end_time: null,
-        crew_call: newShow.crew_call || null,
-        report_type: "Both",
-        cancelled: newShow.cancelled,
-        notes: null,
-      },
-    ]);
-
-    if (error) {
-      console.error("Create default show event failed:", JSON.stringify(error, null, 2));
-
-      alert(
-        error.message ||
-          "The show was created, but the default schedule event failed."
-      );
-    }
-  }
-
   // =====================================================
   // CRUD Actions
   // =====================================================
 
   async function addShow() {
+    if (showEvents.length === 0) {
+      alert("Please add at least one event before creating the show");
+      return;
+    }
     const { data: insertedShow, error } = await supabase
       .from("shows")
       .insert([
@@ -437,7 +434,39 @@ export default function AdminShowsPage() {
       return;
     }
 
-    await createDefaultShowEvent(insertedShow.id);
+    try {
+      await createShowEvents(insertedShow.id, showEvents);
+    } catch (error) {
+      console.error(error);
+    
+      const { error: rollbackError } = await supabase
+        .from("shows")
+        .delete()
+        .eq("id", insertedShow.id);
+
+      if (rollbackError) {
+        console.error(
+          "Failed to remove parent show after event creation failed:",
+          rollbackError
+        );
+
+        alert(
+          "The events could not be saved, and the incomplete parent show could not be removed automatically. Please check Manage Shows."
+        );
+
+        await loadShows();
+        return;
+      }
+
+      alert(
+        error instanceof Error
+        ? error.message
+        : "The show was created, but it's events could not be saved."
+      );
+
+      return;
+    }
+    
     await saveFOHStaffing(insertedShow.id);
     await addActivityLog("show_added", `Added show: ${newShow.name}`, insertedShow.id);
 
@@ -450,6 +479,11 @@ export default function AdminShowsPage() {
 
   async function updateShow() {
     if (!editingShowId) return;
+
+    if (showEvents.length === 0) {
+      alert("A show must have at lease one event.");
+      return;
+    }
 
     const { error } = await supabase
       .from("shows")
@@ -479,6 +513,20 @@ export default function AdminShowsPage() {
       return;
     }
 
+    try {
+      await replaceShowEvents(editingShowId, showEvents);
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        error instanceof Error
+        ? error.message
+        : "Failed to update show events."
+      );
+
+  return;
+}
+    await replaceShowEvents(editingShowId, showEvents);
     await saveFOHStaffing(editingShowId);
     await addActivityLog("show_edited", `Edited show: ${editShow.name}`, editingShowId);
 
@@ -594,6 +642,10 @@ export default function AdminShowsPage() {
     toggleCrewAssignment: toggleStaffAssignment,
     crewSearchTerm,
     setCrewSearchTerm,
+
+    events: showEvents,
+    setEvents: setShowEvents,
+    
     documents,
     selectedFile,
     setSelectedFile,

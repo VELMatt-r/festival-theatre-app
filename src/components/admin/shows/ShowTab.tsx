@@ -38,24 +38,8 @@ export default function ShowTab({
           </Field>
         </div>
 
-        <Field label="Event Type">
-          <select
-            value={form.event_type}
-            onChange={(e) =>
-              setForm({ ...form, event_type: e.target.value as EventType})
-            }
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-white"
-          >
-            <option className="bg-zinc-900 text-white" value="Show">Show</option>
-            <option className="bg-zinc-900 text-white" value="Rehearsal">Rehearsal</option>
-            <option className="bg-zinc-900 text-white" value="Get-in">Get-in</option>
-            <option className="bg-zinc-900 text-white" value="Get-out">Get-out</option>
-            <option className="bg-zinc-900 text-white" value="Maintenance">Maintenance</option>
-            <option className="bg-zinc-900 text-white" value="Site Visit">Site Visit</option>
-          </select>
-        </Field>
-
-        <Field label="Venue">
+        <div className="md:col-span-2">
+          <Field label="Venue">
           <select
             value={form.venue_id || ""}
             onChange={(e) => {
@@ -86,6 +70,7 @@ export default function ShowTab({
             ))}
           </select>
         </Field>
+        </div>
       </div>
     </section>
 

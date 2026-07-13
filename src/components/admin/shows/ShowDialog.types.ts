@@ -1,4 +1,6 @@
-import type { ShowForm, FOHStaffingAssignment } from "./types"
+import { Dispatch, SetStateAction } from "react";
+import type { ShowForm, FOHStaffingAssignment, ShowEventForm } from "./types"
+
 
 export interface ShowDialogProps {
   open: boolean;
@@ -8,6 +10,9 @@ export interface ShowDialogProps {
   setForm: React.Dispatch<React.SetStateAction<ShowForm>>;
   onSave: () => void;
   saveLabel: string;
+
+  events: ShowEventForm[];
+  setEvents: Dispatch<SetStateAction<ShowEventForm[]>>;
 
   crewMembers: any[];
   assignedCrewIds: string[];
