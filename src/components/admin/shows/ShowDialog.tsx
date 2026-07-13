@@ -15,7 +15,6 @@ import {
 import ShowTab from "./ShowTab";
 import NotesTab from "./NotesTab";
 import VisitingCompanyTab from "./VisitingCompanyTab";
-import TechnicalCrewTab from "./TechnicalCrewTab";
 import FOHStaffingTab from "./FOHStaffingTab";
 import DocumentsTab from "./DocumentsTab";
 import EventsTab from "./EventsTab";
@@ -132,23 +131,11 @@ export default function ShowDialog({
 
           <ShowTab form={form} setForm={setForm} venues={venues}/>
 
-          <EventsTab events={events} setEvents={setEvents}/>
+          <EventsTab events={events} setEvents={setEvents} parentDate={form.date_time}/>
 
           <VisitingCompanyTab form={form} setForm={setForm} />
 
           <NotesTab form={form} setForm={setForm} />
-
-          <TechnicalCrewTab
-            crewSearchTerm={crewSearchTerm}
-            setCrewSearchTerm={setCrewSearchTerm}
-            editingShowId={editingShowId}
-            assignedCrew={assignedCrew}
-            availableCrew={availableCrew}
-            assignedExternalCrew={assignedExternalCrew}
-            availableExternalCrew={availableExternalCrew}
-            toggleCrewAssignment={toggleCrewAssignment}
-            toggleExternalCrewAssignment={toggleExternalCrewAssignment}
-          />
 
           <FOHStaffingTab
             editingShowId={editingShowId}
@@ -215,11 +202,6 @@ function TabNavigation() {
 
         <TabsTrigger value="notes" className={TAB_TRIGGER_CLASS}>
           Notes
-        </TabsTrigger>
-
-        <TabsTrigger value="crew" className={TAB_TRIGGER_CLASS}>
-          <span className="hidden sm:inline">Technical Crew</span>
-          <span className="sm:hidden">Tech</span>
         </TabsTrigger>
 
         <TabsTrigger value="foh" className={TAB_TRIGGER_CLASS}>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import DatePicker from "react-datepicker";
 import { EVENT_TYPES, type EventType } from "@/lib/eventStyles";
+import EventCrewAssignment from "./EventCrewAssignment";
 
 import {
   Dialog,
@@ -25,6 +26,7 @@ type EventDialogProps = {
   onOpenChange: (open: boolean) => void;
   event: ShowEventForm | null;
   onSave: (event: ShowEventForm) => void;
+  parentDate: Date | null;
 };
 
 // =====================================================
@@ -47,27 +49,37 @@ export default function EventDialog({
   onOpenChange,
   event,
   onSave,
+  parentDate,
 }: EventDialogProps) {
   const [form, setForm] = useState<ShowEventForm>({
     ...emptyShowEvent,
   });
 
   const isEditing = event !== null;
+  const canAssignCrew = Boolean(form.id);
 
   // Reset the form whenever the dialog opens or the selected event changes.
-  useEffect(() => {
-    if (!open) return;
+ useEffect(() => {
+  if (!open) return;
 
-    setForm(
-      event
-        ? {
-            ...event,
-          }
-        : {
-            ...emptyShowEvent,
-          }
-    );
-  }, [open, event]);
+  if (event) {
+    setForm({
+      ...event,
+    });
+
+    return;
+  }
+
+  const defaultDate = parentDate
+    ? new Date(parentDate)
+    : null;
+
+  setForm({
+    ...emptyShowEvent,
+    start_time: defaultDate,
+    end_time: defaultDate ? new Date(defaultDate) : null,
+  });
+}, [open, event, parentDate]);
 
   function updateForm<K extends keyof ShowEventForm>(
     field: K,
@@ -84,7 +96,7 @@ export default function EventDialog({
       alert("Please enter an event tilte.");
       return;
     }
-    
+
     if (!form.start_time) {
       alert("Please choose a start date and time.");
       return;
@@ -182,9 +194,24 @@ export default function EventDialog({
 
               <DatePicker
                 selected={form.start_time}
-                onChange={(date: Date | null) =>
-                  updateForm("start_time", date)
-                }
+                onChange={(date: Date | null) => {
+                  setForm((current) => {
+                    const shouldMoveEnd =
+                      !current.end_time ||
+                      current.end_time.getTime() ===
+                      current.start_time?.getTime();
+
+                    return {
+                      ...current,
+                      start_time: date,
+                      end_time: shouldMoveEnd
+                      ? date
+                      ? new Date(date)
+                      : null
+                      : current.end_time,
+                      };
+                    });
+                  }}
                 showTimeSelect
                 timeIntervals={15}
                 dateFormat="dd/MM/yyyy HH:mm"
@@ -243,6 +270,22 @@ export default function EventDialog({
                 Event cancelled
               </span>
             </label>
+          </div>
+
+         <div className="space-y-2">
+            {canAssignCrew ? (
+              <EventCrewAssignment eventId={form.id!} />
+            ) : (
+              <div className="rounded-xl border border-zinc-700 bg-zinc-950 p-4">
+                <p className="text-sm font-medium text-zinc-300">
+                  Technical Crew
+                </p>
+
+                <p className="mt-1 text-sm text-zinc-400">
+                  Save the show first before assigning crew to this event.
+                </p>
+              </div>
+            )}
           </div>
 
           <label className="block space-y-2">

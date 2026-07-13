@@ -5,12 +5,23 @@ import { useParams } from "next/navigation";
 import AppLayout from "@/components/layout/AppLayout";
 import { supabase } from "@/lib/supabase";
 
+import { EVENT_TYPES, type EventType } from "@/lib/eventStyles";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 export default function ShowDetailsPage() {
   const params = useParams();
   const id = params.id as string;
 
   const [show, setShow] = useState<any>(null);
-  const [crew, setCrew] = useState<any[]>([]);
+  const [showEvents, setShowEvents] = useState<any[]>([]);
+  const [selectedShowEvent, setSelectedShowEvent] = useState<any>(null);
+  const [selectedEventCrew, setSelectedEventCrew] = useState<any[]>([]);
+  const [loadingEventCrew, setLoadingEventCrew] = useState(false);
   const [fohStaffing, setFohStaffing] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -47,30 +58,30 @@ export default function ShowDetailsPage() {
 
     setShow(showData);
 
-    const { data: crewData, error: crewError } = await supabase
-  .from("show_staff")
-  .select(`
-    assignment_type,
-    profiles (
-      display_name,
-      department
-    ),
-    external_crew (
-      display_name,
-      department
-    )
-  `)
-  .eq("show_id", id)
-  .eq("assignment_type", "technical");
+    const { data: eventData, error: eventError } = await supabase
+      .from("show_events")
+      .select(`
+        id,
+        title,
+        event_type,
+        start_time,
+        end_time,
+        crew_call,
+        report_type,
+        cancelled,
+        notes
+      `)
+      .eq("show_id", id)
+      .order("start_time", { ascending: true });
 
-    if (crewError) {
-      console.error(crewError);
+    if (eventError) {
+      console.error("Failed to load show events:", eventError);
       return;
     }
 
-    setCrew(crewData || []);
+    setShowEvents(eventData || []);
 
-    const { data: fohData, error: fohError } = await supabase
+       const { data: fohData, error: fohError } = await supabase
       .from("show_foh_staffing")
       .select("*")
       .eq("show_id", id);
@@ -94,7 +105,35 @@ export default function ShowDetailsPage() {
 
     setDocuments(documentData || []);
   }
+  
+  async function loadEventCrew(eventId: number) {
+  setLoadingEventCrew(true);
 
+  const { data, error } = await supabase
+    .from("show_event_staff")
+    .select(`
+      id,
+      profiles (
+        display_name,
+        department
+      ),
+      external_crew (
+        display_name,
+        department
+      )
+    `)
+    .eq("show_event_id", eventId);
+
+  if (error) {
+    console.error("Failed to load event crew:", error);
+    setSelectedEventCrew([]);
+    setLoadingEventCrew(false);
+    return;
+  }
+
+  setSelectedEventCrew(data || []);
+  setLoadingEventCrew(false);
+  }
   if (!show) {
     return (
       <AppLayout>
@@ -136,40 +175,32 @@ export default function ShowDetailsPage() {
             </div>
           </div>
         </div>
-
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-xl font-semibold">Crew</h2>
+          <div>
+            <h2 className="text-xl font-semibold">Schedule</h2>
 
-          <div className="mt-5">
-            <p className="text-sm text-zinc-400">Technical Crew Call</p>
-            <p className="mt-1 text-lg font-semibold">
-              {show.crew_call?.slice(0, 5) || "Not set"}
+            <p className="mt-1 text-sm text-zinc-400">
+              Events scheduled for this show
             </p>
           </div>
 
-          <div className="mt-5">
-            <p className="mb-3 text-sm text-zinc-400">Crew Names</p>
-
-            <div className="flex flex-wrap gap-2">
-              {crew.length === 0 ? (
-                <p className="text-sm text-zinc-500">
-                  No technical crew assigned.
-                </p>
-              ) : (
-                crew.map((member: any, index: number) => (
-                  <span
-                    key={index}
-                    className="rounded-full bg-zinc-800 px-4 py-2 text-sm font-medium"
-                  >
-                    {member.profiles?.display_name ||
-                      member.external_crew?.display_name || "unknown"}
-                  </span>
-                ))
-              )}
-            </div>
+          <div className="mt-5 space-y-3">
+            {showEvents.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No events have been added.
+              </p>
+            ) : (
+            showEvents.map((event) => (
+              <ShowScheduleEventCard
+                key={event.id}
+                event={event}
+                onOpen={() => {setSelectedShowEvent(event), loadEventCrew(event.id)}}
+                />
+              ))
+            )}
           </div>
         </section>
-
+       
         {isAdmin && (
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <h2 className="text-xl font-semibold">FOH Staffing</h2>
@@ -298,9 +329,274 @@ export default function ShowDetailsPage() {
             )}
           </div>
         </section>
+        <ShowScheduleEventDialog
+          event={selectedShowEvent}
+          technicalCrew={selectedEventCrew}
+          loadingCrew={loadingEventCrew}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedShowEvent(null);
+              setSelectedEventCrew([]);
+            }
+          }}
+        />
       </div>
     </AppLayout>
   );
+}
+function ShowScheduleEventCard({
+  event,
+  onOpen,
+}: {
+  event: any;
+  onOpen: () => void;
+}) {
+  const eventType = (event.event_type || "Show") as EventType;
+  const eventStyle = EVENT_TYPES[eventType] ?? EVENT_TYPES.Show;
+  const patternClass = `event-pattern-${eventStyle.pattern}`;
+
+  const start = event.start_time ? new Date(event.start_time) : null;
+  const end = event.end_time ? new Date(event.end_time) : null;
+
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border ${
+        event.cancelled
+          ? "border-red-800 bg-red-950/40"
+          : "border-zinc-700 bg-zinc-950/40"
+      }`}
+    >
+      <div className="flex min-h-[128px]">
+        <div
+          className={`flex w-16 shrink-0 items-center justify-center border-r border-white/10 ${patternClass}`}
+        >
+          <span className="-rotate-90 whitespace-nowrap text-sm font-semibold text-white">
+            {eventType}
+          </span>
+        </div>
+
+        <div className="grid flex-1 gap-5 p-5 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_auto] lg:items-center">
+  <div>
+    <p
+      className={`font-semibold ${
+        event.cancelled
+          ? "text-zinc-400 line-through"
+          : "text-white"
+      }`}
+    >
+      {event.title}
+    </p>
+
+    <p className="mt-1 text-sm text-zinc-500">
+      {eventType}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      Date
+    </p>
+
+    <p className="mt-1 font-medium text-zinc-200">
+      {start
+        ? start.toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "Not set"}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      Times
+    </p>
+
+    <p className="mt-1 font-medium text-zinc-200">
+      {formatTimeRange(start, end)}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      Crew Call
+    </p>
+
+    <p className="mt-1 font-medium text-zinc-200">
+      {event.crew_call?.slice(0, 5) || "Not set"}
+    </p>
+  </div>
+
+  <div className="flex lg:justify-end">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium transition hover:bg-indigo-500"
+    >
+      More Details
+    </button>
+  </div>
+</div>
+      </div>
+    </div>
+  );
+}
+function ShowScheduleEventDialog({
+  event,
+  technicalCrew,
+  loadingCrew,
+  onOpenChange,
+}: {
+  event: any;
+  technicalCrew: any[];
+  loadingCrew: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const start = event?.start_time
+    ? new Date(event.start_time)
+    : null;
+
+  const end = event?.end_time
+    ? new Date(event.end_time)
+    : null;
+
+  return (
+    <Dialog
+      open={!!event}
+      onOpenChange={onOpenChange}
+    >
+      <DialogContent className="border-zinc-800 bg-zinc-900 text-white sm:max-w-2xl">
+        <DialogHeader>
+          <p className="text-sm text-zinc-400">
+            {event?.event_type || "Event"}
+          </p>
+
+          <DialogTitle className="text-2xl font-bold">
+            {event?.title || "Event Details"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <EventDetail
+            label="Start"
+            value={formatDateTime(start)}
+          />
+
+          <EventDetail
+            label="End"
+            value={end ? formatDateTime(end) : "Not set"}
+          />
+
+          <EventDetail
+            label="Crew Call"
+            value={event?.crew_call?.slice(0, 5) || "Not set"}
+          />
+
+          <EventDetail
+            label="Event Type"
+            value={event?.event_type || "Not set"}
+          />
+        </div>
+
+        <div className="mt-5">
+          <p className="text-sm text-zinc-400">
+            Technical Crew
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {loadingCrew ? (
+              <p className="text-sm text-zinc-500">
+                Loading technical crew...
+              </p>
+            ) : technicalCrew.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No technical crew assigned.
+              </p>
+            ) : (
+              technicalCrew.map((member: any) => {
+                const name =
+                  member.profiles?.display_name ||
+                  member.external_crew?.display_name ||
+                  "Unknown";
+
+                return (
+                  <span
+                    key={member.id}
+                    className="rounded-full bg-zinc-800 px-4 py-2 text-sm font-medium"
+                  >
+                    {name}
+                  </span>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <p className="text-sm text-zinc-400">
+            Notes
+          </p>
+
+          <p className="mt-2 min-h-24 whitespace-pre-wrap rounded-xl bg-zinc-800 p-4 text-zinc-100">
+            {event?.notes || "No notes added."}
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function EventDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl bg-zinc-800 p-4">
+      <p className="text-sm text-zinc-400">
+        {label}
+      </p>
+
+      <p className="mt-1 font-medium">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatTimeRange(
+  start: Date | null,
+  end: Date | null
+) {
+  if (!start) return "Not set";
+
+  const startTime = start.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (!end) return startTime;
+
+  const endTime = end.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return `${startTime} – ${endTime}`;
+}
+
+function formatDateTime(date: Date | null) {
+  if (!date) return "Not set";
+
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function Info({

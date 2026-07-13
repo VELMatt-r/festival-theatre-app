@@ -38,32 +38,36 @@ export default function SchedulePage() {
     loadVenues();
   }, []);
 
-  async function loadShows() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+ async function loadShows() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    if (user) {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("role, department")
-        .eq("id", user.id)
-        .single();
+  if (user) {
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("role, department")
+      .eq("id", user.id)
+      .single();
 
-      setProfile(profileData);
-    }
+    setProfile(profileData);
+  }
 
-    const { data, error } = await supabase
-    .from("shows")
-    .select(`
-      *,
-      venues (
+const { data, error } = await supabase
+  .from("show_events")
+  .select(`
+    id,
+    title,
+    event_type,
+    start_time,
+    end_time,
+    crew_call,
+    report_type,
+    cancelled,
+    notes,
+
+    show_event_staff (
       id,
-      name,
-      calendar_colour
-    ),
-    show_staff (
-      assignment_type,
       profiles (
         display_name,
         department
@@ -73,68 +77,92 @@ export default function SchedulePage() {
         department
       )
     ),
-    show_foh_staffing (
-      role_label,
-      staff_name,
-      notes
+
+    shows (
+      id,
+      name,
+      venue,
+      venue_id,
+      cancelled,
+
+      venues (
+        id,
+        name,
+        calendar_colour
+      ),
+
+      show_foh_staffing (
+        role_label,
+        staff_name,
+        notes
+      )
     )
-  `);
+  `)
+  .order("start_time", { ascending: true });
 
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    const formattedEvents =
-      data?.map((show) => {
-        const technicalStaff =
-          show.show_staff
-            ?.filter(
-              (assignment: any) =>
-                assignment.assignment_type === "technical"
-            )
-            .map((assignment: any) => ({
-              name:
-                assignment.profiles?.display_name || 
-                assignment.external_crew?.display_name || "Unknown",
-              department:
-                assignment.profiles?.department || 
-                assignment.external_crew?.display_name || "Technical",
-              assignmentType: "technical",
-            })) || [];
-
-        const fohStaff =
-          show.show_foh_staffing?.map((assignment: any) => ({
-            name:
-              assignment.staff_name ||
-              assignment.role_label ||
-              "Unknown",
-            department: "FOH",
-            assignmentType: "foh",
-          })) || [];
-
-        return {
-          title: show.name,
-          start: show.date_time,
-          display: "block",
-          backgroundColor: show.cancelled ? "#b91c1c" : undefined,
-          borderColor: show.cancelled ? "#991b1b" : undefined,
-          extendedProps: {
-            cancelled: show.cancelled,
-            venue: show.venue,
-            venueColour: show.venues?.calendar_colour || "#6366f1",
-            eventType: show.event_type || "Show",
-            crewCall: show.crew_call,
-            showId: show.id,
-            venueId: show.venue_id,
-            technicalStaff,
-            fohStaff,
-          },
-        };
-      }) || [];
-
-    setEvents(formattedEvents);
+  if (error) {
+    console.error("Load schedule events failed:", error);
+    return;
   }
+
+  const formattedEvents =
+    data?.map((event: any) => {
+      const show = event.shows;
+
+      const technicalStaff =
+        event.show_event_staff?.map((assignment: any) => ({
+          name:
+            assignment.profiles?.display_name ||
+            assignment.external_crew?.display_name ||
+            "Unknown",
+          department:
+            assignment.profiles?.department ||
+            assignment.external_crew?.department ||
+            "Technical",
+          assignmentType: "technical",
+        })) || [];
+
+      const fohStaff =
+        show?.show_foh_staffing?.map((assignment: any) => ({
+          name:
+            assignment.staff_name ||
+            assignment.role_label ||
+            "Unknown",
+          department: "FOH",
+          assignmentType: "foh",
+        })) || [];
+
+      const cancelled =
+        event.cancelled || show?.cancelled || false;
+
+      return {
+        id: String(event.id),
+        title: event.title,
+        start: event.start_time,
+        end: event.end_time,
+        display: "block",
+        backgroundColor: cancelled ? "#b91c1c" : undefined,
+        borderColor: cancelled ? "#991b1b" : undefined,
+        extendedProps: {
+          cancelled,
+          venue: show?.venue,
+          venueColour:
+            show?.venues?.calendar_colour || "#6366f1",
+          eventType: event.event_type || "Show",
+          crewCall: event.crew_call,
+          reportType: event.report_type,
+          notes: event.notes,
+          showId: show?.id,
+          showName: show?.name,
+          venueId: show?.venue_id,
+          technicalStaff,
+          fohStaff,
+        },
+      };
+    }) || [];
+
+  setEvents(formattedEvents);
+}
  async function loadVenues() {
     const { data, error } = await supabase
       .from("venues")
@@ -303,6 +331,9 @@ export default function SchedulePage() {
       >
         <DialogContent className="border-zinc-800 bg-zinc-900 text-white sm:max-w-md">
           <DialogHeader>
+            <p className="text-sm tiext-zinc-400">
+              {selectedEvent?.extendedProps?.showName}
+            </p>
             <DialogTitle className="text-2xl font-bold">
               {selectedEvent?.title}
             </DialogTitle>
@@ -310,7 +341,7 @@ export default function SchedulePage() {
 
           <div className="space-y-6">
             <InfoBlock
-              label="Show Time"
+              label="Event Time"
               value={selectedEvent?.start?.toLocaleString("en-GB", {
                 day: "2-digit",
                 month: "short",

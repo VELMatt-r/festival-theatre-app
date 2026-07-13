@@ -12,11 +12,13 @@ import type { ShowEventForm } from "./types";
 type EventsTabProps = {
   events: ShowEventForm[];
   setEvents: React.Dispatch<React.SetStateAction<ShowEventForm[]>>;
+  parentDate: Date | null;
 };
 
 export default function EventsTab({
   events,
   setEvents,
+  parentDate,
 }: EventsTabProps) {
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editingEventIndex, setEditingEventIndex] = useState<number | null>(
@@ -114,6 +116,7 @@ export default function EventsTab({
         onOpenChange={handleDialogOpenChange}
         event={editingEvent}
         onSave={saveEvent}
+        parentDate={parentDate}
       />
     </TabsContent>
   );

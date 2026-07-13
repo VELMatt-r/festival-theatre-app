@@ -113,23 +113,97 @@ export async function replaceShowEvents(
     throw new Error("A show must have at least one event.");
   }
 
-  const { error: deleteError } = await supabase
+  const existingEvents = events.filter(
+    (event): event is ShowEventForm & { id: number } =>
+      typeof event.id === "number"
+  );
+
+  const newEvents = events.filter(
+    (event) => typeof event.id !== "number"
+  );
+
+  // Find the events currently stored for this show.
+  const { data: storedEvents, error: loadError } = await supabase
     .from("show_events")
-    .delete()
+    .select("id")
     .eq("show_id", showId);
 
-  if (deleteError) {
-    console.error(
-      "Delete existing show events failed:",
-      JSON.stringify(deleteError, null, 2)
-    );
-
+  if (loadError) {
+    console.error("Load existing show events failed:", loadError);
     throw new Error(
-      deleteError.message || "Failed to update show events."
+      loadError.message || "Failed to load existing show events."
     );
   }
 
-  await createShowEvents(showId, events);
+  const retainedIds = new Set(
+    existingEvents.map((event) => event.id)
+  );
+
+  const eventIdsToDelete =
+    storedEvents
+      ?.map((event) => event.id)
+      .filter((eventId) => !retainedIds.has(eventId)) || [];
+
+  // Only delete events the user actually removed.
+  if (eventIdsToDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("show_events")
+      .delete()
+      .eq("show_id", showId)
+      .in("id", eventIdsToDelete);
+
+    if (deleteError) {
+      console.error("Delete removed show events failed:", deleteError);
+      throw new Error(
+        deleteError.message || "Failed to remove deleted show events."
+      );
+    }
+  }
+
+  // Update existing events without changing their IDs.
+  if (existingEvents.length > 0) {
+    const updateRows = existingEvents.map((event) => {
+      const startTime = formatLocalDateTime(event.start_time);
+
+      if (!startTime) {
+        throw new Error(
+          `The event "${event.title}" needs a start date and time.`
+        );
+      }
+
+      return {
+        id: event.id,
+        show_id: showId,
+        title: event.title.trim(),
+        event_type: event.event_type,
+        start_time: startTime,
+        end_time: formatLocalDateTime(event.end_time),
+        crew_call: event.crew_call || null,
+        report_type: event.report_type,
+        cancelled: event.cancelled,
+        notes: event.notes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    const { error: updateError } = await supabase
+      .from("show_events")
+      .upsert(updateRows, {
+        onConflict: "id",
+      });
+
+    if (updateError) {
+      console.error("Update show events failed:", updateError);
+      throw new Error(
+        updateError.message || "Failed to update show events."
+      );
+    }
+  }
+
+  // Insert only newly added events.
+  if (newEvents.length > 0) {
+    await createShowEvents(showId, newEvents);
+  }
 }
 
 // =====================================================
