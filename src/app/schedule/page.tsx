@@ -124,6 +124,10 @@ const { data, error } = await supabase
     data?.map((event: any) => {
       const show = event.shows;
 
+      const calendarTitle = show?.name
+        ? `${show.name} - ${event.title}`
+        :event.title;
+
       const technicalStaff =
         event.show_event_staff?.map((assignment: any) => ({
           name:
@@ -162,7 +166,7 @@ const { data, error } = await supabase
 
       return {
         id: String(event.id),
-        title: event.title,
+        title: calendarTitle,
         start: event.start_time,
         end: event.end_time,
         display: "block",
@@ -182,6 +186,7 @@ const { data, error } = await supabase
           venueId: show?.venue_id,
           technicalStaff,
           fohStaff,
+          eventName: event.title,
         },
       };
     }) || [];
@@ -553,7 +558,7 @@ async function openOrCreateReport(
               {selectedEvent?.extendedProps?.showName}
             </p>
             <DialogTitle className="text-2xl font-bold">
-              {selectedEvent?.title}
+              {selectedEvent?.extendedProps?.eventName}
             </DialogTitle>
           </DialogHeader>
 
