@@ -38,7 +38,7 @@ export type ShowEventForm = {
   start_time: Date | null;
   end_time: Date | null;
   crew_call: string;
-  report_type: "Technical" | "FOH" | "Both" | "None";
+  report_type_ids: number[];
   cancelled: boolean;
   notes: string;
 };
@@ -49,7 +49,17 @@ export const emptyShowEvent: ShowEventForm = {
   start_time: null,
   end_time: null,
   crew_call: "",
-  report_type: "Both",
+  report_type_ids: [],
   cancelled: false,
   notes: "",
+};
+
+export type ShowReportType = {
+  id: number;
+  name: string;
+  description: string | null;
+  report_category: string;
+  form_key: string;
+  active: boolean;
+  sort_order: number;
 };

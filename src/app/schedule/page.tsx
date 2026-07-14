@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppLayout from "@/components/layout/AppLayout";
 
 import { EVENT_TYPES, EventType } from "@/lib/eventStyles";
@@ -25,7 +26,14 @@ type StaffMember = {
   assignmentType: string;
 };
 
+type EventReportType = {
+  id: number;
+  name: string;
+  formKey: string;
+};
+
 export default function SchedulePage() {
+  const router = useRouter();
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -62,9 +70,16 @@ const { data, error } = await supabase
     start_time,
     end_time,
     crew_call,
-    report_type,
     cancelled,
     notes,
+
+    show_event_report_types (
+      show_report_types(
+        id,
+        name,
+        form_key
+      )
+    ),
 
     show_event_staff (
       id,
@@ -135,6 +150,16 @@ const { data, error } = await supabase
       const cancelled =
         event.cancelled || show?.cancelled || false;
 
+      const reportTypes: EventReportType[] =
+        event.show_event_report_types
+          ?.map((item: any) => item.show_report_types)
+          .filter(Boolean)
+          .map((reportType: any) => ({
+            id: reportType.id,
+            name: reportType.name,
+            formKey: reportType.form_key,
+        })) || [];
+
       return {
         id: String(event.id),
         title: event.title,
@@ -150,7 +175,7 @@ const { data, error } = await supabase
             show?.venues?.calendar_colour || "#6366f1",
           eventType: event.event_type || "Show",
           crewCall: event.crew_call,
-          reportType: event.report_type,
+          reportTypes,
           notes: event.notes,
           showId: show?.id,
           showName: show?.name,
@@ -177,6 +202,199 @@ const { data, error } = await supabase
 
     setVenues(data || []);
   }
+
+async function openOrCreateReport(
+  reportType: EventReportType
+) {
+  if (!selectedEvent) return;
+
+  const eventId = Number(selectedEvent.id);
+  const eventStart = selectedEvent.start;
+
+  // =====================================================
+  // FOH Report
+  // =====================================================
+
+  if (reportType.formKey === "foh-show") {
+    const { data: existingFOHReport, error: existingFOHError } =
+      await supabase
+        .from("foh_reports")
+        .select("id")
+        .eq("show_event_id", eventId)
+        .maybeSingle();
+
+    if (existingFOHError) {
+      console.error(
+        "Check existing FOH report failed:",
+        existingFOHError
+      );
+
+      alert(
+        existingFOHError.message ||
+          "Failed to check for an existing FOH report."
+      );
+
+      return;
+    }
+
+    if (existingFOHReport) {
+      setSelectedEvent(null);
+      router.push(`/foh-reports/${existingFOHReport.id}`);
+      return;
+    }
+
+    const { data: staffingData, error: staffingError } =
+      await supabase
+        .from("show_foh_staffing")
+        .select(`
+          role_key,
+          role_label,
+          staff_name,
+          notes
+        `)
+        .eq(
+          "show_id",
+          selectedEvent.extendedProps.showId
+        )
+        .order("id", { ascending: true });
+
+    if (staffingError) {
+      console.error(
+        "Load FOH staffing failed:",
+        staffingError
+      );
+    }
+
+    const { data: createdFOHReport, error: createFOHError } =
+      await supabase
+        .from("foh_reports")
+        .insert({
+          show_id: selectedEvent.extendedProps.showId,
+          show_event_id: eventId,
+
+          show_name:
+            selectedEvent.extendedProps.showName ||
+            selectedEvent.title,
+
+          venue_name:
+            selectedEvent.extendedProps.venue || null,
+
+          performance_date: eventStart
+            ? formatLocalDate(eventStart)
+            : null,
+
+          performance_time: eventStart
+            ? formatLocalTime(eventStart)
+            : null,
+
+          status: "draft",
+          staffing: staffingData || [],
+        })
+        .select("id")
+        .single();
+
+    if (createFOHError) {
+      console.error(
+        "Create FOH report failed:",
+        createFOHError
+      );
+
+      alert(
+        createFOHError.message ||
+          "Failed to create FOH report."
+      );
+
+      return;
+    }
+
+    setSelectedEvent(null);
+    router.push(`/foh-reports/${createdFOHReport.id}`);
+    return;
+  }
+
+  // =====================================================
+  // Technical Reports
+  // =====================================================
+
+  const { data: existingReport, error: existingError } =
+    await supabase
+      .from("show_reports")
+      .select("id")
+      .eq("show_event_id", eventId)
+      .eq("report_form_key", reportType.formKey)
+      .maybeSingle();
+
+  if (existingError) {
+    console.error(
+      "Check existing technical report failed:",
+      existingError
+    );
+
+    alert(
+      existingError.message ||
+        "Failed to check for an existing report."
+    );
+
+    return;
+  }
+
+  if (existingReport) {
+    setSelectedEvent(null);
+    router.push(`/reports/${existingReport.id}`);
+    return;
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: createdReport, error: createError } =
+    await supabase
+      .from("show_reports")
+      .insert({
+        show_id: selectedEvent.extendedProps.showId,
+        show_event_id: eventId,
+        venue_id: selectedEvent.extendedProps.venueId,
+
+        show_name:
+          selectedEvent.extendedProps.showName ||
+          selectedEvent.title,
+
+        venue_name:
+          selectedEvent.extendedProps.venue || null,
+
+        performance_date: eventStart
+          ? formatLocalDate(eventStart)
+          : null,
+
+        performance_time: eventStart
+          ? formatLocalTime(eventStart)
+          : null,
+
+        report_form_key: reportType.formKey,
+        status: "draft",
+        created_by: user?.id || null,
+      })
+      .select("id")
+      .single();
+
+  if (createError) {
+    console.error(
+      "Create technical report failed:",
+      createError
+    );
+
+    alert(
+      createError.message ||
+        "Failed to create report."
+    );
+
+    return;
+  }
+
+  setSelectedEvent(null);
+  router.push(`/reports/${createdReport.id}`);
+}
 
   const isAdmin = profile?.role === "admin" || profile?.role === "Admin";
   const userDepartment = profile?.department?.toLowerCase() || "";
@@ -388,12 +606,29 @@ const { data, error } = await supabase
             ) : null}
 
             {(isAdmin || !userDepartment.includes("foh")) && (
-  <Link
-    href={`/shows/${selectedEvent?.extendedProps?.showId}`}
-    className="block w-full rounded-xl bg-indigo-600 py-3 text-center font-medium transition hover:bg-indigo-500"
-  >
-    More Details
-  </Link>
+  <div className="space-y-3">
+  {selectedEvent?.extendedProps?.reportTypes?.map(
+    (reportType: EventReportType) => (
+      <button
+        key={reportType.id}
+        type="button"
+        onClick={() => openOrCreateReport(reportType)}
+        className="block w-full rounded-xl bg-green-600 py-3 text-center font-medium transition hover:bg-green-500"
+      >
+        Complete {reportType.name}
+      </button>
+    )
+  )}
+
+  {(isAdmin || !userDepartment.includes("foh")) && (
+    <Link
+      href={`/shows/${selectedEvent?.extendedProps?.showId}`}
+      className="block w-full rounded-xl bg-indigo-600 py-3 text-center font-medium transition hover:bg-indigo-500"
+    >
+      More Details
+    </Link>
+  )}
+</div>
 )}
           </div>
         </DialogContent>
@@ -448,4 +683,19 @@ function StaffSection({
       </div>
     </div>
   );
+}
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalTime(date: Date) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${hours}:${minutes}`;
 }

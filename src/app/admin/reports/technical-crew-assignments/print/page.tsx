@@ -5,20 +5,30 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type ShowRow = {
+type EventRow = {
   id: number;
-  name: string | null;
-  date_time: string | null;
-  venue: string | null;
-  venue_id: number | null;
+  title: string | null;
+  event_type: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  crew_call: string | null;
   cancelled: boolean | null;
-  show_staff?: {
-    assignment_type: string | null;
+
+  shows: {
+    id: number;
+    name: string | null;
+    venue: string | null;
+    venue_id: number | null;
+    cancelled: boolean | null;
+  } | null;
+
+  show_event_staff?: {
     profiles: {
       id: string;
       display_name: string | null;
     } | null;
-    external_crew?: {
+
+    external_crew: {
       id: number;
       display_name: string | null;
     } | null;
@@ -46,49 +56,62 @@ export default function TechnicalCrewAssignmentsPrintPage() {
   const dateFrom = searchParams.get("dateFrom") || "";
   const dateTo = searchParams.get("dateTo") || "";
 
-  const [shows, setShows] = useState<ShowRow[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [technicalUsers, setTechnicalUsers] = useState<TechnicalUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadShows() {
+    async function loadEvents() {
       setLoading(true);
 
-      const { data: showsData, error: showsError } = await supabase
-        .from("shows")
+      const { data: eventsData, error: eventsError } = await supabase
+        .from("show_events")
         .select(`
           id,
+          title,
+          event_type,
+          start_time,
+          end_time,
+          crew_call,
+          cancelled,
+
+        shows (
+          id,
           name,
-          date_time,
           venue,
           venue_id,
-          cancelled,
-          show_staff (
-            assignment_type,
-            profiles (
-              id,
-              display_name
-            ),
-            external_crew (
-              id,
-              display_name
-            )
-          )
-        `)
-        .eq("cancelled", false)
-        .order("date_time", { ascending: true });
+          cancelled
+          ),
 
-      if (showsError) {
-        console.error(
-          "Load technical crew assignments print report failed:",
-          showsError
-        );
-        setLoading(false);
-        return;
-      }
+        show_event_staff (
+          profiles (
+            id,
+            display_name
+          ),
+        external_crew (
+          id,
+          display_name
+        )
+      )
+    `)
+  .order("start_time", { ascending: true });
 
-      setShows((showsData || []) as unknown as ShowRow[]);
+if (eventsError) {
+  console.error(
+    "Load technical crew assignments print report failed:",
+    eventsError
+  );
+
+  setLoading(false);
+  return;
+}
+
+const activeEvents = (eventsData || []).filter((event: any) => {
+  return !event.cancelled && !event.shows?.cancelled;
+});
+
+setEvents(activeEvents as unknown as EventRow[]);
 
       const { data: venuesData, error: venuesError } = await supabase
         .from("venues")
@@ -117,71 +140,86 @@ export default function TechnicalCrewAssignmentsPrintPage() {
       setLoading(false);
     }
 
-    loadShows();
+    loadEvents();
   }, []);
 
-  function getTechnicalCrew(show: ShowRow) {
-    return (
-      show.show_staff?.filter(
+  function getTechnicalCrew(event: EventRow) {
+  return (
+    event.show_event_staff?.filter(
+      (assignment) =>
+        assignment.profiles || assignment.external_crew
+    ) || []
+  );
+}
+
+ const filteredEvents = useMemo(() => {
+  return events.filter((event) => {
+    const searchValue = search.toLowerCase();
+    const technicalCrew = getTechnicalCrew(event);
+    const show = event.shows;
+
+    const matchesSearch =
+      searchValue === "" ||
+      event.title?.toLowerCase().includes(searchValue) ||
+      event.event_type?.toLowerCase().includes(searchValue) ||
+      show?.name?.toLowerCase().includes(searchValue) ||
+      show?.venue?.toLowerCase().includes(searchValue) ||
+      technicalCrew.some((assignment) => {
+        const name =
+          assignment.profiles?.display_name ||
+          assignment.external_crew?.display_name ||
+          "";
+
+        return name.toLowerCase().includes(searchValue);
+      });
+
+    const matchesVenue =
+      venueFilter === "all" ||
+      String(show?.venue_id) === venueFilter;
+
+    const matchesTechnicalUser =
+      technicalUserFilter === "all" ||
+      technicalCrew.some(
         (assignment) =>
-          assignment.assignment_type === "technical" &&
-          (assignment.profiles || assignment.external_crew)
-      ) || []
-    );
-  }
-
-  const filteredShows = useMemo(() => {
-    return shows.filter((show) => {
-      const searchValue = search.toLowerCase();
-      const technicalCrew = getTechnicalCrew(show);
-
-      const matchesSearch =
-        searchValue === "" ||
-        show.name?.toLowerCase().includes(searchValue) ||
-        show.venue?.toLowerCase().includes(searchValue) ||
-        technicalCrew.some((assignment) => {
-          const name =
-            assignment.profiles?.display_name ||
-            assignment.external_crew?.display_name ||
-            "";
-
-          return name.toLowerCase().includes(searchValue);
-        });
-
-      const matchesVenue =
-        venueFilter === "all" || String(show.venue_id) === venueFilter;
-
-      const matchesTechnicalUser =
-        technicalUserFilter === "all" ||
-        technicalCrew.some(
-          (assignment) => assignment.profiles?.id === technicalUserFilter
-        );
-
-      const showDate = show.date_time ? new Date(show.date_time) : null;
-
-      const matchesDateFrom =
-        !dateFrom ||
-        (showDate && showDate >= new Date(`${dateFrom}T00:00:00`));
-
-      const matchesDateTo =
-        !dateTo ||
-        (showDate && showDate <= new Date(`${dateTo}T23:59:59`));
-
-      return (
-        matchesSearch &&
-        matchesVenue &&
-        matchesTechnicalUser &&
-        matchesDateFrom &&
-        matchesDateTo
+          assignment.profiles?.id === technicalUserFilter
       );
-    });
-  }, [shows, search, venueFilter, technicalUserFilter, dateFrom, dateTo]);
+
+    const eventDate = event.start_time
+      ? new Date(event.start_time)
+      : null;
+
+    const matchesDateFrom =
+      !dateFrom ||
+      (eventDate &&
+        eventDate >= new Date(`${dateFrom}T00:00:00`));
+
+    const matchesDateTo =
+      !dateTo ||
+      (eventDate &&
+        eventDate <= new Date(`${dateTo}T23:59:59`));
+
+    return (
+      matchesSearch &&
+      matchesVenue &&
+      matchesTechnicalUser &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
+  });
+}, [
+  events,
+  search,
+  venueFilter,
+  technicalUserFilter,
+  dateFrom,
+  dateTo,
+]);
 
   const totalAssignments = useMemo(() => {
-    return filteredShows.reduce((total, show) => {
-      return total + getTechnicalCrew(show).length;
-    }, 0);
-  }, [filteredShows]);
+  return filteredEvents.reduce((total, event) => {
+    return total + getTechnicalCrew(event).length;
+  }, 0);
+}, [filteredEvents]);
 
   const selectedVenueName =
     venueFilter === "all"
@@ -223,7 +261,7 @@ export default function TechnicalCrewAssignmentsPrintPage() {
               </h1>
 
               <p className="mt-2 text-zinc-300">
-                Active shows with assigned technical crew.
+                Active Events and their assigned technical crew.
               </p>
             </div>
 
@@ -233,10 +271,10 @@ export default function TechnicalCrewAssignmentsPrintPage() {
                 value={new Date().toLocaleString("en-GB")}
               />
               <PrintMeta
-                label="Shows"
-                value={`${filteredShows.length} show${
-                  filteredShows.length === 1 ? "" : "s"
-                }`}
+               label="Events"
+               value={`${filteredEvents.length} show${
+                filteredEvents.length === 1 ? "" : "s"
+               }`}
               />
               <PrintMeta
                 label="Assignments"
@@ -265,87 +303,114 @@ export default function TechnicalCrewAssignmentsPrintPage() {
 
             <PrintSection title="Report Results">
               <div className="overflow-x-auto print:overflow-visible">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-300">
-                      <th className="py-3 pr-4 font-semibold text-zinc-700">
-                        Show
-                      </th>
-                      <th className="py-3 pr-4 font-semibold text-zinc-700">
-                        Date
-                      </th>
-                      <th className="py-3 pr-4 font-semibold text-zinc-700">
-                        Time
-                      </th>
-                      <th className="py-3 pr-4 font-semibold text-zinc-700">
-                        Venue
-                      </th>
-                      <th className="py-3 pr-4 font-semibold text-zinc-700">
-                        Technical Crew
-                      </th>
-                    </tr>
-                  </thead>
+  <table className="w-full border-collapse text-left text-sm">
+    <thead>
+      <tr className="border-b border-zinc-300">
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Show
+        </th>
 
-                  <tbody>
-                    {filteredShows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="py-6 text-center text-zinc-500"
-                        >
-                          No shows found.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredShows.map((show) => {
-                        const technicalCrew = getTechnicalCrew(show);
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Event
+        </th>
 
-                        return (
-                          <tr
-                            key={show.id}
-                            className="border-b border-zinc-200 align-top"
-                          >
-                            <td className="py-3 pr-4 font-medium">
-                              {show.name || "Untitled Show"}
-                            </td>
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Date
+        </th>
 
-                            <td className="py-3 pr-4">
-                              {formatDate(show.date_time)}
-                            </td>
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Time
+        </th>
 
-                            <td className="py-3 pr-4">
-                              {formatTime(show.date_time)}
-                            </td>
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Crew Call
+        </th>
 
-                            <td className="py-3 pr-4">
-                              {show.venue || "No venue"}
-                            </td>
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Venue
+        </th>
 
-                            <td className="py-3 pr-4">
-                              {technicalCrew.length === 0 ? (
-                                <span className="text-zinc-500">
-                                  No technical crew assigned
-                                </span>
-                              ) : (
-                                <div className="space-y-1">
-                                  {technicalCrew.map((assignment, index) => {
-                                    const name =
-                                      assignment.profiles?.display_name ||
-                                      assignment.external_crew?.display_name ||
-                                      "Unknown";
+        <th className="py-3 pr-4 font-semibold text-zinc-700">
+          Technical Crew
+        </th>
+      </tr>
+    </thead>
 
-                                    return <div key={index}>{name}</div>;
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+    <tbody>
+      {filteredEvents.length === 0 ? (
+        <tr>
+          <td
+            colSpan={7}
+            className="py-6 text-center text-zinc-500"
+          >
+            No events found.
+          </td>
+        </tr>
+      ) : (
+        filteredEvents.map((event) => {
+          const technicalCrew = getTechnicalCrew(event);
+          const show = event.shows;
+
+          return (
+            <tr
+              key={event.id}
+              className="border-b border-zinc-200 align-top"
+            >
+              <td className="py-3 pr-4 font-medium">
+                {show?.name || "Untitled Show"}
+              </td>
+
+              <td className="py-3 pr-4">
+                <p className="font-medium">
+                  {event.title || "Untitled Event"}
+                </p>
+
+                <p className="mt-1 text-xs text-zinc-500">
+                  {event.event_type || "Show"}
+                </p>
+              </td>
+
+              <td className="py-3 pr-4">
+                {formatDate(event.start_time)}
+              </td>
+
+              <td className="py-3 pr-4">
+                {formatTime(event.start_time)}
+              </td>
+
+              <td className="py-3 pr-4">
+                {event.crew_call?.slice(0, 5) || "Not set"}
+              </td>
+
+              <td className="py-3 pr-4">
+                {show?.venue || "No venue"}
+              </td>
+
+              <td className="py-3 pr-4">
+                {technicalCrew.length === 0 ? (
+                  <span className="text-zinc-500">
+                    No technical crew assigned
+                  </span>
+                ) : (
+                  <div className="space-y-1">
+                    {technicalCrew.map((assignment, index) => {
+                      const name =
+                        assignment.profiles?.display_name ||
+                        assignment.external_crew?.display_name ||
+                        "Unknown";
+
+                      return <div key={index}>{name}</div>;
+                    })}
+                  </div>
+                )}
+              </td>
+            </tr>
+          );
+        })
+      )}
+    </tbody>
+  </table>
+</div>
             </PrintSection>
           </div>
 

@@ -17,28 +17,38 @@ type TechnicalUser = {
   disabled: boolean | null;
 };
 
-type ShowRow = {
+type EventRow = {
   id: number;
-  name: string | null;
-  date_time: string | null;
-  venue: string | null;
-  venue_id: number | null;
+  title: string | null;
+  event_type: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  crew_call: string | null;
   cancelled: boolean | null;
-  show_staff?: {
-  assignment_type: string | null;
-  profiles: {
-    id: string;
-    display_name: string | null;
-  } | null;
-  external_crew: {
+
+  shows: {
     id: number;
-    display_name: string | null;
+    name: string | null;
+    venue: string | null;
+    venue_id: number | null;
+    cancelled: boolean | null;
   } | null;
-}[];
+
+  show_event_staff?: {
+    profiles: {
+      id: string;
+      display_name: string | null;
+    } | null;
+
+    external_crew: {
+      id: number;
+      display_name: string | null;
+    } | null;
+  }[];
 };
 
 export default function TechnicalCrewAssignmentsReportPage() {
-  const [shows, setShows] = useState<ShowRow[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [technicalUsers, setTechnicalUsers] = useState<TechnicalUser[]>([]);
 
@@ -63,43 +73,57 @@ export default function TechnicalCrewAssignmentsReportPage() {
   }, []);
 
   async function loadData() {
-    const { data: showsData, error: showsError } = await supabase
-      .from("shows")
-      .select(`
+    const { data: eventsData, error: eventsError } = await supabase
+  .from("show_events")
+  .select(`
+    id,
+    title,
+    event_type,
+    start_time,
+    end_time,
+    crew_call,
+    cancelled,
+
+    shows (
+      id,
+      name,
+      venue,
+      venue_id,
+      cancelled
+    ),
+
+    show_event_staff (
+      profiles (
         id,
-        name,
-        date_time,
-        venue,
-        venue_id,
-        cancelled,
-        show_staff (
-  assignment_type,
-  profiles (
-    id,
-    display_name
-  ),
-  external_crew (
-    id,
-    display_name
-  )
-)
-      `)
-      .eq("cancelled", false)
-      .order("date_time", { ascending: true });
+        display_name
+      ),
+      external_crew (
+        id,
+        display_name
+      )
+    )
+  `)
+  .order("start_time", { ascending: true });
 
-    if (showsError) {
-      console.error(
-        "Load technical crew assignments failed:",
-        JSON.stringify(showsError, null, 2)
-      );
-      alert(
-        showsError.message ||
-          "Failed to load technical crew assignments report."
-      );
-      return;
-    }
+if (eventsError) {
+  console.error(
+    "Load technical crew assignments failed:",
+    JSON.stringify(eventsError, null, 2)
+  );
 
-    setShows((showsData || []) as unknown as ShowRow[]);
+  alert(
+    eventsError.message ||
+      "Failed to load technical crew assignments report."
+  );
+
+  return;
+}
+
+const activeEvents = (eventsData || []).filter((event: any) => {
+  return !event.cancelled && !event.shows?.cancelled;
+});
+
+setEvents(activeEvents as unknown as EventRow[]);
 
     const { data: venuesData, error: venuesError } = await supabase
       .from("venues")
@@ -138,63 +162,77 @@ export default function TechnicalCrewAssignmentsReportPage() {
     setTechnicalUsers(technicalOnly);
   }
 
- function getTechnicalCrew(show: ShowRow) {
+ function getTechnicalCrew(event: EventRow) {
   return (
-    show.show_staff?.filter(
+    event.show_event_staff?.filter(
       (assignment) =>
-        assignment.assignment_type === "technical" &&
-        (assignment.profiles || assignment.external_crew)
+        assignment.profiles || assignment.external_crew
     ) || []
   );
 }
 
-  const filteredShows = useMemo(() => {
-    return shows.filter((show) => {
-      const searchValue = search.toLowerCase();
-      const technicalCrew = getTechnicalCrew(show);
+  const filteredEvents = useMemo(() => {
+  return events.filter((event) => {
+    const searchValue = search.toLowerCase();
+    const technicalCrew = getTechnicalCrew(event);
+    const show = event.shows;
 
-      const matchesSearch =
-        searchValue === "" ||
-        show.name?.toLowerCase().includes(searchValue) ||
-        show.venue?.toLowerCase().includes(searchValue) ||
-        technicalCrew.some((assignment) => {
-  const name =
-    assignment.profiles?.display_name ||
-    assignment.external_crew?.display_name ||
-    "";
+    const matchesSearch =
+      searchValue === "" ||
+      event.title?.toLowerCase().includes(searchValue) ||
+      event.event_type?.toLowerCase().includes(searchValue) ||
+      show?.name?.toLowerCase().includes(searchValue) ||
+      show?.venue?.toLowerCase().includes(searchValue) ||
+      technicalCrew.some((assignment) => {
+        const name =
+          assignment.profiles?.display_name ||
+          assignment.external_crew?.display_name ||
+          "";
 
-  return name.toLowerCase().includes(searchValue);
-});
+        return name.toLowerCase().includes(searchValue);
+      });
 
-      const matchesVenue =
-        venueFilter === "all" || String(show.venue_id) === venueFilter;
+    const matchesVenue =
+      venueFilter === "all" ||
+      String(show?.venue_id) === venueFilter;
 
-      const matchesTechnicalUser =
-        technicalUserFilter === "all" ||
-        technicalCrew.some(
-          (assignment) =>
-            assignment.profiles?.id === technicalUserFilter
-        );
-
-      const showDate = show.date_time ? new Date(show.date_time) : null;
-
-      const matchesDateFrom =
-        !dateFrom ||
-        (showDate && showDate >= new Date(`${dateFrom}T00:00:00`));
-
-      const matchesDateTo =
-        !dateTo ||
-        (showDate && showDate <= new Date(`${dateTo}T23:59:59`));
-
-      return (
-        matchesSearch &&
-        matchesVenue &&
-        matchesTechnicalUser &&
-        matchesDateFrom &&
-        matchesDateTo
+    const matchesTechnicalUser =
+      technicalUserFilter === "all" ||
+      technicalCrew.some(
+        (assignment) =>
+          assignment.profiles?.id === technicalUserFilter
       );
-    });
-  }, [shows, search, venueFilter, technicalUserFilter, dateFrom, dateTo]);
+
+    const eventDate = event.start_time
+      ? new Date(event.start_time)
+      : null;
+
+    const matchesDateFrom =
+      !dateFrom ||
+      (eventDate &&
+        eventDate >= new Date(`${dateFrom}T00:00:00`));
+
+    const matchesDateTo =
+      !dateTo ||
+      (eventDate &&
+        eventDate <= new Date(`${dateTo}T23:59:59`));
+
+    return (
+      matchesSearch &&
+      matchesVenue &&
+      matchesTechnicalUser &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
+  });
+}, [
+  events,
+  search,
+  venueFilter,
+  technicalUserFilter,
+  dateFrom,
+  dateTo,
+]);
 
   const selectedVenueName =
     venueFilter === "all"
@@ -230,7 +268,7 @@ export default function TechnicalCrewAssignmentsReportPage() {
             </h1>
 
             <p className="mt-2 text-zinc-400">
-              Active shows with assigned technical crew.
+              Active shows their assigned technical crew.
             </p>
           </div>
 
@@ -343,8 +381,8 @@ export default function TechnicalCrewAssignmentsReportPage() {
             </button>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3 text-sm text-zinc-400">
-              {filteredShows.length} show
-              {filteredShows.length === 1 ? "" : "s"} found
+              {filteredEvents.length} show
+              {filteredEvents.length === 1 ? "" : "s"} found
             </div>
           </div>
         </section>
@@ -354,8 +392,8 @@ export default function TechnicalCrewAssignmentsReportPage() {
             <h2 className="text-xl font-semibold">Report Results</h2>
 
             <p className="text-sm text-zinc-400">
-              {filteredShows.length} result
-              {filteredShows.length === 1 ? "" : "s"}
+              {filteredEvents.length} result
+              {filteredEvents.length === 1 ? "" : "s"}
             </p>
           </div>
 
@@ -366,88 +404,117 @@ export default function TechnicalCrewAssignmentsReportPage() {
                   <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
                     Show
                   </th>
+
+                  <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
+                    Event
+                  </th>
+
                   <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
                     Date
                   </th>
+
                   <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
                     Time
                   </th>
+
+                  <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
+                    Crew Call
+                  </th>
+
                   <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
                     Venue
                   </th>
+
                   <th className="py-3 pr-4 font-semibold text-zinc-300 print:text-black">
                     Technical Crew
                   </th>
                 </tr>
               </thead>
 
-              <tbody>
-                {filteredShows.length === 0 ? (
+             <tbody>
+                {filteredEvents.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={7}
                       className="py-6 text-center text-zinc-500"
                     >
-                      No shows found for the selected filters.
+                    No events found for the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredShows.map((show) => {
-                    const technicalCrew = getTechnicalCrew(show);
+                  filteredEvents.map((event) => {
+                    const technicalCrew = getTechnicalCrew(event);
+                    const show = event.shows;
 
                     return (
                       <tr
-                        key={show.id}
+                        key={event.id}
                         className="border-b border-zinc-800 align-top print:border-zinc-200"
                       >
-                        <td className="py-3 pr-4 font-medium">
-                          {show.name || "Untitled Show"}
-                        </td>
+                      <td className="py-3 pr-4 font-medium">
+                        {show?.name || "Untitled Show"}
+                      </td>
 
-                        <td className="py-3 pr-4">
-                          {formatDate(show.date_time)}
-                        </td>
+                      <td className="py-3 pr-4">
+                        <p className="font-medium">
+                          {event.title || "Untitled Event"}
+                        </p>
 
-                        <td className="py-3 pr-4">
-                          {formatTime(show.date_time)}
-                        </td>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {event.event_type || "Show"}
+                        </p>
+                      </td>
 
-                        <td className="py-3 pr-4">
-                          {show.venue || "No venue"}
-                        </td>
+                      <td className="py-3 pr-4">
+                        {formatDate(event.start_time)}
+                      </td>
 
-                        <td className="py-3 pr-4">
-                          {technicalCrew.length === 0 ? (
-                            <span className="text-zinc-500">
-                              No technical crew assigned
-                            </span>
-                          ) : (
-                            <div className="space-y-1">
-                              {technicalCrew.map((assignment, index) => {
-  const name =
-    assignment.profiles?.display_name ||
-    assignment.external_crew?.display_name ||
-    "Unknown";
+                      <td className="py-3 pr-4">
+                        {formatTime(event.start_time)}
+                      </td>
 
-  const source = assignment.external_crew ? "External" : "User";
+                      <td className="py-3 pr-4">
+                        {event.crew_call?.slice(0, 5) || "Not set"}
+                      </td>
 
-  return (
-    <div key={index}>
-      {name}{" "}
-      <span className="text-xs text-zinc-500">
-        ({source})
-      </span>
-    </div>
-  );
-})}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
+                      <td className="py-3 pr-4">
+                        {show?.venue || "No venue"}
+                      </td>
+
+                      <td className="py-3 pr-4">
+                        {technicalCrew.length === 0 ? (
+                          <span className="text-zinc-500">
+                            No technical crew assigned
+                          </span>
+                        ) : (
+                          <div className="space-y-1">
+                            {technicalCrew.map((assignment, index) => {
+                              const name =
+                                assignment.profiles?.display_name ||
+                                assignment.external_crew?.display_name ||
+                                "Unknown";
+
+                              const source = assignment.external_crew
+                                ? "External"
+                                : "User";
+
+                              return (
+                                <div key={index}>
+                                  {name}{" "}
+                                  <span className="text-xs text-zinc-500">
+                                    ({source})
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
             </table>
           </div>
         </section>

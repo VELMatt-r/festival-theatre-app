@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import TechnicalGetInReport from "@/components/reports/TechnicalGetInReport";
+import TechnicalRehearsalReport from "@/components/reports/TechnicalRehearsalReport";
+
+import { useCallback, useEffect, useState } from "react";
+import { useShowReport } from "@/components/reports/useShowReport";
 import { useParams } from "next/navigation";
+
 import AppLayout from "@/components/layout/AppLayout";
 import { supabase } from "@/lib/supabase";
 
@@ -12,172 +17,177 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
+const TAB_TRIGGER_CLASS =
+  "shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white";
+
 export default function ReportPage() {
   const params = useParams();
   const reportId = Number(params.id);
-
-  const [report, setReport] = useState<any>(null);
-  const [requiresOpeningChecks, setRequiresOpeningChecks] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState("");
-  const [dirty, setDirty] = useState(false);
+  const [reportFormKey, setReportFormKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadReport() {
-      const { data, error } = await supabase
-        .from("show_reports")
-        .select("*, venues(requires_opening_checks)")
-        .eq("id", reportId)
-        .single();
-
-      if (error) {
-        console.error(error);
-        return;
-      }
-
-      setReport(data);
-      setRequiresOpeningChecks(data.venues?.requires_opening_checks || false);
-    }
-
-    loadReport();
-  }, [reportId]);
-
-  useEffect(() => {
-    if (!report || !dirty) return;
-
-    const timeout = setTimeout(() => {
-      saveReport();
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [report, dirty]);
-
-  function updateField(field: string, value: any) {
-    if (report?.status === "submitted") return;
-
-    setReport((current: any) => ({
-      ...current,
-      [field]: value,
-    }));
-
-    setDirty(true);
-  }
-
-  async function saveReport() {
-    if (!report || !dirty) return;
-
-    setSaving(true);
-
-    const { error } = await supabase
+  async function loadReportType() {
+    const { data, error } = await supabase
       .from("show_reports")
-      .update({
-        backstage_doors_unlocked: report.backstage_doors_unlocked,
-        sides_open: report.sides_open,
-        sides_open_reason: report.sides_open_reason,
-        structure_damage: report.structure_damage,
-        structure_damage_details: report.structure_damage_details,
-        opening_meter_reading: report.opening_meter_reading,
-        lx_working: report.lx_working,
-        pa_working: report.pa_working,
-        dressing_rooms_set_up: report.dressing_rooms_set_up,
-        additional_equipment_on_site: report.additional_equipment_on_site,
-        opening_comments: report.opening_comments,
-        house_open_time: report.house_open_time,
-        act_1_clearance_time: report.act_1_clearance_time,
-        act_1_start_time: report.act_1_start_time,
-        act_1_end_time: report.act_1_end_time,
-        act_2_clearance_time: report.act_2_clearance_time,
-        act_2_start_time: report.act_2_start_time,
-        act_2_end_time: report.act_2_end_time,
-        technical_issues_venue: report.technical_issues_venue,
-        technical_issues_company: report.technical_issues_company,
-        foh_issues: report.foh_issues,
-        health_safety_incidents: report.health_safety_incidents,
-        additional_recharges: report.additional_recharges,
-        general_comments: report.general_comments,
-        sides_closed: report.sides_closed,
-        sides_closed_reason: report.sides_closed_reason,
-        barriers_in_place: report.barriers_in_place,
-        new_structure_damage: report.new_structure_damage,
-        new_structure_damage_details: report.new_structure_damage_details,
-        closing_meter_reading: report.closing_meter_reading,
-        bins_emptied: report.bins_emptied,
-        doors_locked: report.doors_locked,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", reportId);
-
-    setSaving(false);
+      .select("report_form_key")
+      .eq("id", reportId)
+      .single();
 
     if (error) {
-      console.error(error);
+      console.error("Load report type failed:", error);
+      setLoading(false);
       return;
     }
 
-    setDirty(false);
-    setLastSaved(new Date().toLocaleTimeString("en-GB"));
+    setReportFormKey(data.report_form_key || "technical-show");
+    setLoading(false);
   }
 
-  async function submitReport() {
-    const confirmed = window.confirm(
-      "Submit this report? This will finalise the report and disable editing."
+  if (Number.isFinite(reportId)) {
+    loadReportType();
+  }
+}, [reportId]);
+
+const getUpdatePayload = useCallback(
+  (currentReport: Record<string, any>) => ({
+    backstage_doors_unlocked:
+      currentReport.backstage_doors_unlocked,
+    sides_open: currentReport.sides_open,
+    sides_open_reason:
+      currentReport.sides_open_reason,
+    structure_damage:
+      currentReport.structure_damage,
+    structure_damage_details:
+      currentReport.structure_damage_details,
+    opening_meter_reading:
+      currentReport.opening_meter_reading,
+    lx_working:
+      currentReport.lx_working,
+    pa_working:
+      currentReport.pa_working,
+    dressing_rooms_set_up:
+      currentReport.dressing_rooms_set_up,
+    additional_equipment_on_site:
+      currentReport.additional_equipment_on_site,
+    opening_comments:
+      currentReport.opening_comments,
+
+    house_open_time:
+      currentReport.house_open_time,
+    act_1_clearance_time:
+      currentReport.act_1_clearance_time,
+    act_1_start_time:
+      currentReport.act_1_start_time,
+    act_1_end_time:
+      currentReport.act_1_end_time,
+
+    act_1_sound_foh:
+      currentReport.act_1_sound_foh,
+    act_1_sound_box_office:
+      currentReport.act_1_sound_box_office,
+    act_1_sound_lake:
+      currentReport.act_1_sound_lake,
+    act_1_sound_cottages:
+      currentReport.act_1_sound_cottages,
+    act_1_sound_top_gate:
+      currentReport.act_1_sound_top_gate,
+
+    act_2_clearance_time:
+      currentReport.act_2_clearance_time,
+    act_2_start_time:
+      currentReport.act_2_start_time,
+    act_2_end_time:
+      currentReport.act_2_end_time,
+
+    act_2_sound_foh:
+      currentReport.act_2_sound_foh,
+    act_2_sound_box_office:
+      currentReport.act_2_sound_box_office,
+    act_2_sound_lake:
+      currentReport.act_2_sound_lake,
+    act_2_sound_cottages:
+      currentReport.act_2_sound_cottages,
+    act_2_sound_top_gate:
+      currentReport.act_2_sound_top_gate,
+
+    technical_issues_venue:
+      currentReport.technical_issues_venue,
+    technical_issues_company:
+      currentReport.technical_issues_company,
+    foh_issues:
+      currentReport.foh_issues,
+    health_safety_incidents:
+      currentReport.health_safety_incidents,
+    general_comments:
+      currentReport.general_comments,
+    additional_recharges:
+      currentReport.additional_recharges,
+
+    sides_closed:
+      currentReport.sides_closed,
+    sides_closed_reason:
+      currentReport.sides_closed_reason,
+    barriers_in_place:
+      currentReport.barriers_in_place,
+    new_structure_damage:
+      currentReport.new_structure_damage,
+    new_structure_damage_details:
+      currentReport.new_structure_damage_details,
+    closing_meter_reading:
+      currentReport.closing_meter_reading,
+    bins_emptied:
+      currentReport.bins_emptied,
+    doors_locked:
+      currentReport.doors_locked,
+  }),
+  []
+);
+
+const {
+  report,
+  loading: reportLoading,
+  saving,
+  dirty,
+  lastSaved,
+  requiresOpeningChecks,
+  isSubmitted,
+  updateField,
+  saveReport,
+  submitReport,
+} = useShowReport({
+  reportId,
+  reportLabel: "Technical Show",
+  getUpdatePayload,
+  getActivityDescription: (currentReport) =>
+    `Submitted Technical Show report for ${
+      currentReport.show_name || "Unknown Event"
+    }`,
+});
+
+    // =====================================================
+  // Report Routing
+  // =====================================================
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <p className="text-zinc-400">Loading report...</p>
+      </AppLayout>
     );
-
-    if (!confirmed) return;
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    let submittedByName = "Unknown User";
-
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .single();
-
-      submittedByName = profile?.display_name || user.email || "Unknown User";
-    }
-
-    const { error } = await supabase
-      .from("show_reports")
-      .update({
-        status: "submitted",
-        submitted_by: user?.id || null,
-        submitted_by_name: submittedByName,
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", reportId);
-
-    if (error) {
-      console.error(error);
-      alert("Failed to submit report.");
-      return;
-    }
-
-    await supabase.from("activity_log").insert([
-      {
-        action: "report_submitted",
-        description: `Submitted report for ${report.show_name}`,
-        user_id: user?.id,
-        user_name: submittedByName,
-        show_id: report.show_id,
-        report_id: reportId,
-      },
-    ]);
-
-    setReport((current: any) => ({
-      ...current,
-      status: "submitted",
-      submitted_by_name: submittedByName,
-      submitted_at: new Date().toISOString(),
-    }));
-
-    alert("Report submitted successfully.");
   }
+
+  if (reportFormKey === "technical-getin") {
+    return <TechnicalGetInReport reportId={reportId} />;
+  }
+
+  if (reportFormKey === "technical-rehearsal") {
+  return <TechnicalRehearsalReport reportId={reportId} />;
+}
+
+  // =====================================================
+  // Technical Show Report
+  // =====================================================
 
   if (!report) {
     return (
@@ -193,7 +203,7 @@ export default function ReportPage() {
         <div className="flex flex-col gap-4 border-b border-zinc-800 pb-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-wide text-zinc-400">
-              Show Report
+              Technical Show Report
             </p>
 
             <h1 className="mt-2 text-3xl font-bold">
@@ -201,13 +211,16 @@ export default function ReportPage() {
             </h1>
 
             <p className="mt-2 text-zinc-400">
-              {report.venue_name} · {report.performance_date} ·{" "}
-              {report.performance_time}
+              {report.venue_name} · {formatDisplayDate(report.performance_date)}
+              {" · "}
+              {report.performance_time || "No time"}
             </p>
 
-            {report.status === "submitted" && (
+            {isSubmitted && (
               <div className="mt-3 rounded-xl border border-green-500/30 bg-green-950/20 p-4 text-sm text-zinc-300">
-                <p className="font-medium text-green-300">Submitted Report</p>
+                <p className="font-medium text-green-300">
+                  Submitted Report
+                </p>
 
                 <p className="mt-1">
                   Submitted by {report.submitted_by_name || "Unknown"}
@@ -216,7 +229,9 @@ export default function ReportPage() {
                 <p>
                   Submitted at{" "}
                   {report.submitted_at
-                    ? new Date(report.submitted_at).toLocaleString("en-GB")
+                    ? new Date(report.submitted_at).toLocaleString(
+                        "en-GB"
+                      )
                     : "Unknown"}
                 </p>
               </div>
@@ -225,10 +240,11 @@ export default function ReportPage() {
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-left text-sm text-zinc-400 md:text-right">
             <p>Status: {report.status}</p>
-
             <p>
               {saving
                 ? "Saving..."
+                : dirty
+                ? "Unsaved changes"
                 : lastSaved
                 ? `Last saved ${lastSaved}`
                 : "Autosave ready"}
@@ -239,49 +255,42 @@ export default function ReportPage() {
         <Tabs defaultValue="opening" className="space-y-6">
           <div className="-mx-2 overflow-x-auto px-2 pb-1">
             <TabsList className="flex w-max min-w-full gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
-              <TabsTrigger
-                value="opening"
-                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-              >
+              <TabsTrigger value="opening" className={TAB_TRIGGER_CLASS}>
                 <span className="hidden sm:inline">Opening Checks</span>
                 <span className="sm:hidden">Opening</span>
               </TabsTrigger>
 
-              <TabsTrigger
-                value="show"
-                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-              >
-                <span className="hidden sm:inline">Show Timings & Notes</span>
-                <span className="sm:hidden">Timings</span>
+              <TabsTrigger value="act-1" className={TAB_TRIGGER_CLASS}>
+                Act 1
               </TabsTrigger>
 
-              <TabsTrigger
-                value="closing"
-                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-              >
+              <TabsTrigger value="act-2" className={TAB_TRIGGER_CLASS}>
+                Act 2
+              </TabsTrigger>
+
+              <TabsTrigger value="notes" className={TAB_TRIGGER_CLASS}>
+                Notes
+              </TabsTrigger>
+
+              <TabsTrigger value="closing" className={TAB_TRIGGER_CLASS}>
                 <span className="hidden sm:inline">Closing Checks</span>
                 <span className="sm:hidden">Closing</span>
               </TabsTrigger>
 
-              <TabsTrigger
-                value="submit"
-                className="shrink-0 rounded-xl px-4 py-2 text-zinc-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"
-              >
+              <TabsTrigger value="submit" className={TAB_TRIGGER_CLASS}>
                 Submit
               </TabsTrigger>
             </TabsList>
           </div>
 
           <TabsContent value="opening">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Opening Checks</h2>
-
+            <ReportSection title="Opening Checks">
               {!requiresOpeningChecks ? (
-                <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                <Notice>
                   Opening checks are not required for this venue.
-                </p>
+                </Notice>
               ) : (
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <YesNo
                     label="Backstage Doors Unlocked"
                     value={report.backstage_doors_unlocked}
@@ -293,7 +302,9 @@ export default function ReportPage() {
                   <YesNo
                     label="Sides Open"
                     value={report.sides_open}
-                    onChange={(value) => updateField("sides_open", value)}
+                    onChange={(value) =>
+                      updateField("sides_open", value)
+                    }
                   />
 
                   {report.sides_open === false && (
@@ -307,17 +318,22 @@ export default function ReportPage() {
                   )}
 
                   <YesNo
-                    label="Any Damage To Structure"
+                    label="Any Damage to Structure"
                     value={report.structure_damage}
-                    onChange={(value) => updateField("structure_damage", value)}
+                    onChange={(value) =>
+                      updateField("structure_damage", value)
+                    }
                   />
 
                   {report.structure_damage === true && (
                     <TextArea
-                      label="Damage Detail"
+                      label="Damage Details"
                       value={report.structure_damage_details}
                       onChange={(value) =>
-                        updateField("structure_damage_details", value)
+                        updateField(
+                          "structure_damage_details",
+                          value
+                        )
                       }
                     />
                   )}
@@ -333,13 +349,17 @@ export default function ReportPage() {
                   <YesNo
                     label="LX Working"
                     value={report.lx_working}
-                    onChange={(value) => updateField("lx_working", value)}
+                    onChange={(value) =>
+                      updateField("lx_working", value)
+                    }
                   />
 
                   <YesNo
                     label="PA Working"
                     value={report.pa_working}
-                    onChange={(value) => updateField("pa_working", value)}
+                    onChange={(value) =>
+                      updateField("pa_working", value)
+                    }
                   />
 
                   <YesNo
@@ -351,10 +371,13 @@ export default function ReportPage() {
                   />
 
                   <YesNo
-                    label="Additional Equipment On Site"
+                    label="Additional Equipment on Site"
                     value={report.additional_equipment_on_site}
                     onChange={(value) =>
-                      updateField("additional_equipment_on_site", value)
+                      updateField(
+                        "additional_equipment_on_site",
+                        value
+                      )
                     }
                   />
 
@@ -367,76 +390,122 @@ export default function ReportPage() {
                   />
                 </div>
               )}
-            </section>
+            </ReportSection>
           </TabsContent>
 
-          <TabsContent value="show">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Show Timings & Notes</h2>
+          <TabsContent value="act-1">
+            <ReportSection title="Act 1">
+              <div className="space-y-7">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                    Timings
+                  </h3>
 
-              <div className="mt-6 space-y-6">
-                <div className="max-w-sm">
-                  <TimeField
-                    label="House Open"
-                    value={report.house_open_time}
-                    onChange={(value) =>
-                      updateField("house_open_time", value)
-                    }
-                  />
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <TimeField
+                      label="House Open Time"
+                      value={report.house_open_time}
+                      onChange={(value) =>
+                        updateField("house_open_time", value)
+                      }
+                    />
+
+                    <TimeField
+                      label="Clearance Time"
+                      value={report.act_1_clearance_time}
+                      onChange={(value) =>
+                        updateField("act_1_clearance_time", value)
+                      }
+                    />
+
+                    <TimeField
+                      label="Start Time"
+                      value={report.act_1_start_time}
+                      onChange={(value) =>
+                        updateField("act_1_start_time", value)
+                      }
+                    />
+
+                    <TimeField
+                      label="End Time"
+                      value={report.act_1_end_time}
+                      onChange={(value) =>
+                        updateField("act_1_end_time", value)
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <TimeField
-                    label="Act 1 Clearance"
-                    value={report.act_1_clearance_time}
-                    onChange={(value) =>
-                      updateField("act_1_clearance_time", value)
-                    }
-                  />
+                <SoundLevelsSection
+                  values={{
+                    foh: report.act_1_sound_foh,
+                    boxOffice: report.act_1_sound_box_office,
+                    lake: report.act_1_sound_lake,
+                    cottages: report.act_1_sound_cottages,
+                    topGate: report.act_1_sound_top_gate,
+                  }}
+                  onChange={(field, value) =>
+                    updateField(`act_1_sound_${field}`, value)
+                  }
+                />
+              </div>
+            </ReportSection>
+          </TabsContent>
 
-                  <TimeField
-                    label="Act 1 Start"
-                    value={report.act_1_start_time}
-                    onChange={(value) =>
-                      updateField("act_1_start_time", value)
-                    }
-                  />
+          <TabsContent value="act-2">
+            <ReportSection title="Act 2">
+              <div className="space-y-7">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                    Timings
+                  </h3>
 
-                  <TimeField
-                    label="Act 1 End"
-                    value={report.act_1_end_time}
-                    onChange={(value) =>
-                      updateField("act_1_end_time", value)
-                    }
-                  />
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    <TimeField
+                      label="Clearance Time"
+                      value={report.act_2_clearance_time}
+                      onChange={(value) =>
+                        updateField("act_2_clearance_time", value)
+                      }
+                    />
+
+                    <TimeField
+                      label="Start Time"
+                      value={report.act_2_start_time}
+                      onChange={(value) =>
+                        updateField("act_2_start_time", value)
+                      }
+                    />
+
+                    <TimeField
+                      label="End Time"
+                      value={report.act_2_end_time}
+                      onChange={(value) =>
+                        updateField("act_2_end_time", value)
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <TimeField
-                    label="Act 2 Clearance"
-                    value={report.act_2_clearance_time}
-                    onChange={(value) =>
-                      updateField("act_2_clearance_time", value)
-                    }
-                  />
+                <SoundLevelsSection
+                  values={{
+                    foh: report.act_2_sound_foh,
+                    boxOffice: report.act_2_sound_box_office,
+                    lake: report.act_2_sound_lake,
+                    cottages: report.act_2_sound_cottages,
+                    topGate: report.act_2_sound_top_gate,
+                  }}
+                  onChange={(field, value) =>
+                    updateField(`act_2_sound_${field}`, value)
+                  }
+                />
+              </div>
+            </ReportSection>
+          </TabsContent>
 
-                  <TimeField
-                    label="Act 2 Start"
-                    value={report.act_2_start_time}
-                    onChange={(value) =>
-                      updateField("act_2_start_time", value)
-                    }
-                  />
-
-                  <TimeField
-                    label="Act 2 End"
-                    value={report.act_2_end_time}
-                    onChange={(value) =>
-                      updateField("act_2_end_time", value)
-                    }
-                  />
-                </div>
-
+          <TabsContent value="notes">
+            <ReportSection title="Notes">
+              <div className="space-y-4">
                 <TextArea
                   label="Technical Issues (Venue)"
                   value={report.technical_issues_venue}
@@ -456,14 +525,19 @@ export default function ReportPage() {
                 <TextArea
                   label="FOH Issues"
                   value={report.foh_issues}
-                  onChange={(value) => updateField("foh_issues", value)}
+                  onChange={(value) =>
+                    updateField("foh_issues", value)
+                  }
                 />
 
                 <TextArea
                   label="H&S Incidents"
                   value={report.health_safety_incidents}
                   onChange={(value) =>
-                    updateField("health_safety_incidents", value)
+                    updateField(
+                      "health_safety_incidents",
+                      value
+                    )
                   }
                 />
 
@@ -483,37 +557,40 @@ export default function ReportPage() {
                   }
                 />
               </div>
-            </section>
+            </ReportSection>
           </TabsContent>
 
           <TabsContent value="closing">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Closing Checks</h2>
-
+            <ReportSection title="Closing Checks">
               {!requiresOpeningChecks ? (
-                <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                <Notice>
                   Closing checks are not required for this venue.
-                </p>
+                </Notice>
               ) : (
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <YesNo
                     label="Sides Closed"
                     value={report.sides_closed}
-                    onChange={(value) => updateField("sides_closed", value)}
+                    onChange={(value) =>
+                      updateField("sides_closed", value)
+                    }
                   />
 
                   {report.sides_closed === false && (
                     <>
                       <TextArea
-                        label="Reason For Sides Not Closed"
+                        label="Reason for Sides Not Closed"
                         value={report.sides_closed_reason}
                         onChange={(value) =>
-                          updateField("sides_closed_reason", value)
+                          updateField(
+                            "sides_closed_reason",
+                            value
+                          )
                         }
                       />
 
                       <YesNo
-                        label="Barriers In Place"
+                        label="Barriers in Place"
                         value={report.barriers_in_place}
                         onChange={(value) =>
                           updateField("barriers_in_place", value)
@@ -523,7 +600,7 @@ export default function ReportPage() {
                   )}
 
                   <YesNo
-                    label="Any New Damage To Structure"
+                    label="Any New Damage to Structure"
                     value={report.new_structure_damage}
                     onChange={(value) =>
                       updateField("new_structure_damage", value)
@@ -535,7 +612,10 @@ export default function ReportPage() {
                       label="New Damage Details"
                       value={report.new_structure_damage_details}
                       onChange={(value) =>
-                        updateField("new_structure_damage_details", value)
+                        updateField(
+                          "new_structure_damage_details",
+                          value
+                        )
                       }
                     />
                   )}
@@ -551,34 +631,32 @@ export default function ReportPage() {
                   <YesNo
                     label="Bins Emptied"
                     value={report.bins_emptied}
-                    onChange={(value) => updateField("bins_emptied", value)}
+                    onChange={(value) =>
+                      updateField("bins_emptied", value)
+                    }
                   />
 
                   <YesNo
                     label="Doors Locked"
                     value={report.doors_locked}
-                    onChange={(value) => updateField("doors_locked", value)}
+                    onChange={(value) =>
+                      updateField("doors_locked", value)
+                    }
                   />
                 </div>
               )}
-            </section>
+            </ReportSection>
           </TabsContent>
 
           <TabsContent value="submit">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Submit / Finalise</h2>
+            <ReportSection title="Submit / Finalise">
+              <div className="space-y-4">
+                <Notice>
+                  Submitting this report will mark it as completed and
+                  lock further editing.
+                </Notice>
 
-              <div className="mt-6 space-y-4">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                  <p className="font-medium text-white">Ready to submit?</p>
-
-                  <p className="mt-2 text-sm text-zinc-400">
-                    Submitting this report will mark it as completed and lock
-                    further editing.
-                  </p>
-                </div>
-
-                {report.status === "submitted" ? (
+                {isSubmitted ? (
                   <div className="rounded-xl border border-green-500/30 bg-green-950/20 p-4">
                     <p className="font-medium text-green-300">
                       Report Submitted
@@ -591,29 +669,109 @@ export default function ReportPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={submitReport}
+                    onClick={() => void submitReport()}
                     className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500 sm:w-auto"
                   >
                     Submit Report
                   </button>
                 )}
               </div>
-            </section>
+            </ReportSection>
           </TabsContent>
         </Tabs>
 
         <div className="flex">
           <button
             type="button"
-            onClick={saveReport}
-            disabled={report.status === "submitted"}
+            onClick={() => void saveReport()}
+            disabled={isSubmitted || saving || !dirty}
             className="w-full rounded-xl bg-zinc-800 px-5 py-3 font-medium transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </button>
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+function ReportSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <h2 className="text-2xl font-bold">{title}</h2>
+      <div className="mt-6">{children}</div>
+    </section>
+  );
+}
+
+function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+      {children}
+    </div>
+  );
+}
+
+function SoundLevelsSection({
+  values,
+  onChange,
+}: {
+  values: {
+    foh: string | null;
+    boxOffice: string | null;
+    lake: string | null;
+    cottages: string | null;
+    topGate: string | null;
+  };
+  onChange: (
+    field: "foh" | "box_office" | "lake" | "cottages" | "top_gate",
+    value: string
+  ) => void;
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+        Sound Levels
+      </h3>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <SoundLevelField
+          label="FOH"
+          value={values.foh}
+          onChange={(value) => onChange("foh", value)}
+        />
+
+        <SoundLevelField
+          label="Box Office"
+          value={values.boxOffice}
+          onChange={(value) => onChange("box_office", value)}
+        />
+
+        <SoundLevelField
+          label="Lake"
+          value={values.lake}
+          onChange={(value) => onChange("lake", value)}
+        />
+
+        <SoundLevelField
+          label="Cottages"
+          value={values.cottages}
+          onChange={(value) => onChange("cottages", value)}
+        />
+
+        <SoundLevelField
+          label="Top Gate"
+          value={values.topGate}
+          onChange={(value) => onChange("top_gate", value)}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -623,7 +781,7 @@ function TextInput({
   onChange,
 }: {
   label: string;
-  value: string | null;
+  value: string | number | null;
   onChange: (value: string) => void;
 }) {
   return (
@@ -631,9 +789,10 @@ function TextInput({
       <span className="mb-2 block text-sm text-zinc-400">{label}</span>
 
       <input
-        value={value || ""}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
+        disabled={false}
+        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white disabled:opacity-60"
       />
     </label>
   );
@@ -683,6 +842,31 @@ function TimeField({
   );
 }
 
+function SoundLevelField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-2 block text-sm text-zinc-400">
+        {label}
+      </span>
+
+      <input
+        type="text"
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
+      />
+    </label>
+  );
+}
+
 function TextArea({
   label,
   value,
@@ -693,14 +877,14 @@ function TextArea({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="md:col-span-2">
+    <label className="block">
       <span className="mb-2 block text-sm text-zinc-400">{label}</span>
 
       <textarea
         value={value || ""}
         onChange={(event) => onChange(event.target.value)}
         rows={4}
-        className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
+        className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
       />
     </label>
   );
@@ -740,4 +924,14 @@ function YesNo({
       </span>
     </button>
   );
+}
+
+function formatDisplayDate(value: string | null) {
+  if (!value) return "No date";
+
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }

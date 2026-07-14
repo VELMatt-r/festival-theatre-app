@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 import { TabsContent } from "@/components/ui/tabs";
 
 import EventCard from "./EventCard";
 import EventDialog from "./EventDialog";
 
-import type { ShowEventForm } from "./types";
+import type { ShowEventForm, ShowReportType } from "./types";
 
 type EventsTabProps = {
   events: ShowEventForm[];
@@ -24,6 +25,35 @@ export default function EventsTab({
   const [editingEventIndex, setEditingEventIndex] = useState<number | null>(
     null
   );
+
+  const [reportTypes, setReportTypes] = useState<ShowReportType[]>([]);
+
+  useEffect(() => {
+  loadReportTypes();
+}, []);
+
+async function loadReportTypes() {
+  const { data, error } = await supabase
+    .from("show_report_types")
+    .select(`
+      id,
+      name,
+      description,
+      report_category,
+      form_key,
+      active,
+      sort_order
+    `)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    console.error("Failed to load report types:", error);
+    return;
+  }
+
+  setReportTypes(data || []);
+}
 
   const editingEvent =
     editingEventIndex !== null ? events[editingEventIndex] : null;
@@ -117,6 +147,7 @@ export default function EventsTab({
         event={editingEvent}
         onSave={saveEvent}
         parentDate={parentDate}
+        reportTypes={reportTypes}
       />
     </TabsContent>
   );

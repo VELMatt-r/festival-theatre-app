@@ -71,11 +71,6 @@ export default function EventCard({
               <span className="text-zinc-500">Crew Call:</span>{" "}
               {event.crew_call || "Not set"}
             </p>
-
-            <p>
-              <span className="text-zinc-500">Report:</span>{" "}
-              {event.report_type}
-            </p>
           </div>
 
           {event.notes && (

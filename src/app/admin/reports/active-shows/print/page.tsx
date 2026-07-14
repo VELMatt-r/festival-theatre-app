@@ -1,45 +1,142 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
 
-type ShowRow = {
+type ShowEventRow = {
   id: number;
-  name: string | null;
-  date_time: string | null;
-  venue: string | null;
-  venue_id: number | null;
+  title: string | null;
+  event_type: string;
+  start_time: string | null;
   cancelled: boolean | null;
+
+  shows: {
+    id: number;
+    venue: string | null;
+    venue_id: number | null;
+    cancelled: boolean | null;
+  } | null;
 };
 
 export default function ActiveShowsPrintPage() {
-  const [shows, setShows] = useState<ShowRow[]>([]);
+  const searchParams = useSearchParams();
+
+  const search = searchParams.get("search") || "";
+  const venueFilter = searchParams.get("venue") || "all";
+  const dateFrom = searchParams.get("dateFrom") || "";
+  const dateTo = searchParams.get("dateTo") || "";
+
+  const [events, setEvents] = useState<ShowEventRow[]>([]);
+  const [venueName, setVenueName] = useState("All venues");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadShows() {
-      const { data, error } = await supabase
-        .from("shows")
-        .select("id, name, date_time, venue, venue_id, cancelled")
-        .eq("cancelled", false)
-        .order("date_time", { ascending: true });
-
-      if (error) {
-        console.error("Load active shows print report failed:", error);
-        setLoading(false);
-        return;
-      }
-
-      setShows(data || []);
-      setLoading(false);
-    }
-
-    loadShows();
+    loadEvents();
   }, []);
 
+  async function loadEvents() {
+    const { data, error } = await supabase
+      .from("show_events")
+      .select(`
+        id,
+        title,
+        event_type,
+        start_time,
+        cancelled,
+        shows (
+          id,
+          venue,
+          venue_id,
+          cancelled
+        )
+      `)
+      .eq("event_type", "Show")
+      .eq("cancelled", false)
+      .order("start_time", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Load active shows print report failed:",
+        error
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    const activeEvents = (data || []).filter(
+      (event: any) => !event.shows?.cancelled
+    );
+
+    setEvents(activeEvents as unknown as ShowEventRow[]);
+
+    if (venueFilter !== "all") {
+      const { data: venueData } = await supabase
+        .from("venues")
+        .select("name")
+        .eq("id", Number(venueFilter))
+        .single();
+
+      if (venueData?.name) {
+        setVenueName(venueData.name);
+      }
+    }
+
+    setLoading(false);
+  }
+
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => {
+      const searchValue = search.toLowerCase();
+      const show = event.shows;
+
+      const matchesSearch =
+        searchValue === "" ||
+        event.title?.toLowerCase().includes(searchValue) ||
+        show?.venue?.toLowerCase().includes(searchValue);
+
+      const matchesVenue =
+        venueFilter === "all" ||
+        String(show?.venue_id) === venueFilter;
+
+      const eventDate = event.start_time
+        ? new Date(event.start_time)
+        : null;
+
+      const matchesDateFrom =
+        !dateFrom ||
+        (eventDate &&
+          eventDate >= new Date(`${dateFrom}T00:00:00`));
+
+      const matchesDateTo =
+        !dateTo ||
+        (eventDate &&
+          eventDate <= new Date(`${dateTo}T23:59:59`));
+
+      return (
+        matchesSearch &&
+        matchesVenue &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+  }, [
+    events,
+    search,
+    venueFilter,
+    dateFrom,
+    dateTo,
+  ]);
+
   if (loading) {
-    return <main className="p-10">Loading report...</main>;
+    return (
+      <main className="p-10">
+        Loading report...
+      </main>
+    );
   }
 
   return (
@@ -61,10 +158,12 @@ export default function ActiveShowsPrintPage() {
                 Admin Report
               </p>
 
-              <h1 className="mt-3 text-4xl font-black">Active Shows</h1>
+              <h1 className="mt-3 text-4xl font-black">
+                Active Shows
+              </h1>
 
               <p className="mt-2 text-zinc-300">
-                Shows currently marked as active.
+                Active show events with date, time and venue.
               </p>
             </div>
 
@@ -73,9 +172,12 @@ export default function ActiveShowsPrintPage() {
                 label="Generated"
                 value={new Date().toLocaleString("en-GB")}
               />
+
               <PrintMeta
                 label="Results"
-                value={`${shows.length} show${shows.length === 1 ? "" : "s"}`}
+                value={`${filteredEvents.length} show${
+                  filteredEvents.length === 1 ? "" : "s"
+                }`}
               />
             </div>
           </div>
@@ -84,27 +186,45 @@ export default function ActiveShowsPrintPage() {
         </header>
 
         <div className="space-y-8 px-10 py-8 print:px-8">
-        <PrintSection title="Selected Filters">
-        <PrintRow label="Date From" value="All dates" />
-        <PrintRow label="Date To" value="All dates" />
-        <PrintRow label="Venue" value="All venues" />
-        <PrintRow label="Search" value="None" />
-            </PrintSection>
-          
+          <PrintSection title="Selected Filters">
+            <PrintRow
+              label="Date From"
+              value={dateFrom || "All dates"}
+            />
+
+            <PrintRow
+              label="Date To"
+              value={dateTo || "All dates"}
+            />
+
+            <PrintRow
+              label="Venue"
+              value={venueName}
+            />
+
+            <PrintRow
+              label="Search"
+              value={search || "None"}
+            />
+          </PrintSection>
+
           <PrintSection title="Report Results">
             <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-zinc-300">
                     <th className="py-3 pr-4 font-semibold text-zinc-700">
-                      Show
+                      Event Title
                     </th>
+
                     <th className="py-3 pr-4 font-semibold text-zinc-700">
                       Date
                     </th>
+
                     <th className="py-3 pr-4 font-semibold text-zinc-700">
                       Time
                     </th>
+
                     <th className="py-3 pr-4 font-semibold text-zinc-700">
                       Venue
                     </th>
@@ -112,26 +232,35 @@ export default function ActiveShowsPrintPage() {
                 </thead>
 
                 <tbody>
-                  {shows.length === 0 ? (
+                  {filteredEvents.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-6 text-center text-zinc-500">
+                      <td
+                        colSpan={4}
+                        className="py-6 text-center text-zinc-500"
+                      >
                         No active shows found.
                       </td>
                     </tr>
                   ) : (
-                    shows.map((show) => (
-                      <tr key={show.id} className="border-b border-zinc-200">
+                    filteredEvents.map((event) => (
+                      <tr
+                        key={event.id}
+                        className="border-b border-zinc-200"
+                      >
                         <td className="py-3 pr-4 font-medium">
-                          {show.name || "Untitled Show"}
+                          {event.title || "Untitled Event"}
                         </td>
+
                         <td className="py-3 pr-4">
-                          {formatDate(show.date_time)}
+                          {formatDate(event.start_time)}
                         </td>
+
                         <td className="py-3 pr-4">
-                          {formatTime(show.date_time)}
+                          {formatTime(event.start_time)}
                         </td>
+
                         <td className="py-3 pr-4">
-                          {show.venue || "No venue"}
+                          {event.shows?.venue || "No venue"}
                         </td>
                       </tr>
                     ))
@@ -161,13 +290,24 @@ export default function ActiveShowsPrintPage() {
   );
 }
 
-function PrintMeta({ label, value }: { label: string; value: string | null }) {
+function PrintMeta({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
   if (!value) return null;
 
   return (
     <div className="mb-3 last:mb-0">
-      <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-1 font-semibold text-white">{value}</p>
+      <p className="text-xs uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+
+      <p className="mt-1 font-semibold text-white">
+        {value}
+      </p>
     </div>
   );
 }
@@ -185,7 +325,9 @@ function PrintSection({
         {title}
       </h2>
 
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-3">
+        {children}
+      </div>
     </section>
   );
 }
@@ -201,7 +343,10 @@ function PrintRow({
 
   return (
     <div className="grid gap-2 border-b border-zinc-100 pb-3 text-sm last:border-b-0 md:grid-cols-3">
-      <div className="font-semibold text-zinc-600">{label}</div>
+      <div className="font-semibold text-zinc-600">
+        {label}
+      </div>
+
       <div className="whitespace-pre-wrap text-zinc-950 md:col-span-2">
         {value}
       </div>

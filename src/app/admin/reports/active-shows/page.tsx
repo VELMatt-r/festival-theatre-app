@@ -1,18 +1,24 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+
 import AppLayout from "@/components/layout/AppLayout";
 import { supabase } from "@/lib/supabase";
 
-type ShowRow = {
+type ShowEventRow = {
   id: number;
-  name: string | null;
-  date_time: string | null;
-  venue: string | null;
-  venue_id: number | null;
+  title: string | null;
+  event_type: string;
+  start_time: string | null;
   cancelled: boolean | null;
+
+  shows: {
+    id: number;
+    venue: string | null;
+    venue_id: number | null;
+    cancelled: boolean | null;
+  } | null;
 };
 
 type Venue = {
@@ -21,7 +27,7 @@ type Venue = {
 };
 
 export default function ActiveShowsReportPage() {
-  const [shows, setShows] = useState<ShowRow[]>([]);
+  const [events, setEvents] = useState<ShowEventRow[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
 
   const [search, setSearch] = useState("");
@@ -34,19 +40,44 @@ export default function ActiveShowsReportPage() {
   }, []);
 
   async function loadData() {
-    const { data: showsData, error: showsError } = await supabase
-      .from("shows")
-      .select("id, name, date_time, venue, venue_id, cancelled")
+    const { data: eventsData, error: eventsError } = await supabase
+      .from("show_events")
+      .select(`
+        id,
+        title,
+        event_type,
+        start_time,
+        cancelled,
+        shows (
+          id,
+          venue,
+          venue_id,
+          cancelled
+        )
+      `)
+      .eq("event_type", "Show")
       .eq("cancelled", false)
-      .order("date_time", { ascending: true });
+      .order("start_time", { ascending: true });
 
-    if (showsError) {
-      console.error("Load active shows report failed:", JSON.stringify(showsError, null, 2));
-      alert(showsError.message || "Failed to load active shows report.");
+    if (eventsError) {
+      console.error(
+        "Load active shows report failed:",
+        JSON.stringify(eventsError, null, 2)
+      );
+
+      alert(
+        eventsError.message ||
+          "Failed to load active shows report."
+      );
+
       return;
     }
 
-    setShows(showsData || []);
+    const activeEvents = (eventsData || []).filter(
+      (event: any) => !event.shows?.cancelled
+    );
+
+    setEvents(activeEvents as unknown as ShowEventRow[]);
 
     const { data: venuesData, error: venuesError } = await supabase
       .from("venues")
@@ -55,44 +86,59 @@ export default function ActiveShowsReportPage() {
       .order("name", { ascending: true });
 
     if (venuesError) {
-      console.error("Load venues failed:", JSON.stringify(venuesError, null, 2));
+      console.error(
+        "Load venues failed:",
+        JSON.stringify(venuesError, null, 2)
+      );
+
       return;
     }
 
     setVenues(venuesData || []);
   }
 
-  const filteredShows = useMemo(() => {
-    return shows.filter((show) => {
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => {
       const searchValue = search.toLowerCase();
+      const show = event.shows;
 
       const matchesSearch =
         searchValue === "" ||
-        show.name?.toLowerCase().includes(searchValue) ||
-        show.venue?.toLowerCase().includes(searchValue);
+        event.title?.toLowerCase().includes(searchValue) ||
+        show?.venue?.toLowerCase().includes(searchValue);
 
       const matchesVenue =
-        venueFilter === "all" || String(show.venue_id) === venueFilter;
+        venueFilter === "all" ||
+        String(show?.venue_id) === venueFilter;
 
-      const showDate = show.date_time ? new Date(show.date_time) : null;
+      const eventDate = event.start_time
+        ? new Date(event.start_time)
+        : null;
 
       const matchesDateFrom =
         !dateFrom ||
-        (showDate && showDate >= new Date(`${dateFrom}T00:00:00`));
+        (eventDate &&
+          eventDate >= new Date(`${dateFrom}T00:00:00`));
 
       const matchesDateTo =
         !dateTo ||
-        (showDate && showDate <= new Date(`${dateTo}T23:59:59`));
+        (eventDate &&
+          eventDate <= new Date(`${dateTo}T23:59:59`));
 
-      return matchesSearch && matchesVenue && matchesDateFrom && matchesDateTo;
+      return (
+        matchesSearch &&
+        matchesVenue &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
     });
-  }, [shows, search, venueFilter, dateFrom, dateTo]);
-
-  const selectedVenueName =
-    venueFilter === "all"
-      ? "All Venues"
-      : venues.find((venue) => String(venue.id) === venueFilter)?.name ||
-        "Selected Venue";
+  }, [
+    events,
+    search,
+    venueFilter,
+    dateFrom,
+    dateTo,
+  ]);
 
   function resetFilters() {
     setSearch("");
@@ -100,6 +146,30 @@ export default function ActiveShowsReportPage() {
     setDateFrom("");
     setDateTo("");
   }
+
+  const printParams = new URLSearchParams();
+
+  if (search) {
+    printParams.set("search", search);
+  }
+
+  if (venueFilter !== "all") {
+    printParams.set("venue", venueFilter);
+  }
+
+  if (dateFrom) {
+    printParams.set("dateFrom", dateFrom);
+  }
+
+  if (dateTo) {
+    printParams.set("dateTo", dateTo);
+  }
+
+  const printUrl = `/admin/reports/active-shows/print${
+    printParams.toString()
+      ? `?${printParams.toString()}`
+      : ""
+  }`;
 
   return (
     <AppLayout>
@@ -115,7 +185,7 @@ export default function ActiveShowsReportPage() {
             </h1>
 
             <p className="mt-2 text-zinc-400">
-              Shows currently marked as active, with date, time and venue.
+              Active show events with date, time and venue.
             </p>
           </div>
 
@@ -128,24 +198,28 @@ export default function ActiveShowsReportPage() {
             </Link>
 
             <Link
-              href="/admin/reports/active-shows/print"
-                target="_blank"
-                className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
+              href={printUrl}
+              target="_blank"
+              className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
             >
-                Print / Save PDF
+              Print / Save PDF
             </Link>
           </div>
         </div>
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-xl font-semibold">Filters</h2>
+          <h2 className="text-xl font-semibold">
+            Filters
+          </h2>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <FilterField label="Date From">
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
+                onChange={(event) =>
+                  setDateFrom(event.target.value)
+                }
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
               />
             </FilterField>
@@ -154,7 +228,9 @@ export default function ActiveShowsReportPage() {
               <input
                 type="date"
                 value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
+                onChange={(event) =>
+                  setDateTo(event.target.value)
+                }
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
               />
             </FilterField>
@@ -162,13 +238,20 @@ export default function ActiveShowsReportPage() {
             <FilterField label="Venue">
               <select
                 value={venueFilter}
-                onChange={(event) => setVenueFilter(event.target.value)}
+                onChange={(event) =>
+                  setVenueFilter(event.target.value)
+                }
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
               >
-                <option value="all">All Venues</option>
+                <option value="all">
+                  All Venues
+                </option>
 
                 {venues.map((venue) => (
-                  <option key={venue.id} value={venue.id}>
+                  <option
+                    key={venue.id}
+                    value={venue.id}
+                  >
                     {venue.name}
                   </option>
                 ))}
@@ -178,8 +261,10 @@ export default function ActiveShowsReportPage() {
             <FilterField label="Search">
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search show or venue..."
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search event or venue..."
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
               />
             </FilterField>
@@ -195,97 +280,89 @@ export default function ActiveShowsReportPage() {
             </button>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-3 text-sm text-zinc-400">
-              {filteredShows.length} show
-              {filteredShows.length === 1 ? "" : "s"} found
+              {filteredEvents.length} show
+              {filteredEvents.length === 1 ? "" : "s"} found
             </div>
           </div>
         </section>
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Report Results</h2>
+            <h2 className="text-xl font-semibold">
+              Report Results
+            </h2>
 
             <p className="text-sm text-zinc-400">
-              {filteredShows.length} result
-              {filteredShows.length === 1 ? "" : "s"}
+              {filteredEvents.length} result
+              {filteredEvents.length === 1 ? "" : "s"}
             </p>
           </div>
 
-          <ReportTable shows={filteredShows} />
+          <ReportTable events={filteredEvents} />
         </section>
       </div>
-
     </AppLayout>
   );
 }
 
 function ReportTable({
-  shows,
-  printMode = false,
+  events,
 }: {
-  shows: ShowRow[];
-  printMode?: boolean;
+  events: ShowEventRow[];
 }) {
   return (
-    <div className="overflow-x-auto print:overflow-visible">
+    <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b border-zinc-700 print:border-zinc-300">
-            <th
-              className={`py-3 pr-4 font-semibold ${
-                printMode ? "text-zinc-700" : "text-zinc-300"
-              }`}
-            >
-              Show
+          <tr className="border-b border-zinc-700">
+            <th className="py-3 pr-4 font-semibold text-zinc-300">
+              Event Title
             </th>
-            <th
-              className={`py-3 pr-4 font-semibold ${
-                printMode ? "text-zinc-700" : "text-zinc-300"
-              }`}
-            >
+
+            <th className="py-3 pr-4 font-semibold text-zinc-300">
               Date
             </th>
-            <th
-              className={`py-3 pr-4 font-semibold ${
-                printMode ? "text-zinc-700" : "text-zinc-300"
-              }`}
-            >
+
+            <th className="py-3 pr-4 font-semibold text-zinc-300">
               Time
             </th>
-            <th
-              className={`py-3 pr-4 font-semibold ${
-                printMode ? "text-zinc-700" : "text-zinc-300"
-              }`}
-            >
+
+            <th className="py-3 pr-4 font-semibold text-zinc-300">
               Venue
             </th>
           </tr>
         </thead>
 
         <tbody>
-          {shows.length === 0 ? (
+          {events.length === 0 ? (
             <tr>
-              <td colSpan={4} className="py-6 text-center text-zinc-500">
+              <td
+                colSpan={4}
+                className="py-6 text-center text-zinc-500"
+              >
                 No active shows found for the selected filters.
               </td>
             </tr>
           ) : (
-            shows.map((show) => (
+            events.map((event) => (
               <tr
-                key={show.id}
-                className="border-b border-zinc-800 print:border-zinc-200"
+                key={event.id}
+                className="border-b border-zinc-800"
               >
                 <td className="py-3 pr-4 font-medium">
-                  {show.name || "Untitled Show"}
+                  {event.title || "Untitled Event"}
                 </td>
+
                 <td className="py-3 pr-4">
-                  {formatDate(show.date_time)}
+                  {formatDate(event.start_time)}
                 </td>
+
                 <td className="py-3 pr-4">
-                  {formatTime(show.date_time)}
+                  {formatTime(event.start_time)}
                 </td>
+
                 <td className="py-3 pr-4">
-                  {show.venue || "No venue"}
+                  {event.shows?.venue || "No venue"}
                 </td>
               </tr>
             ))
@@ -308,63 +385,8 @@ function FilterField({
       <label className="mb-2 block text-sm text-zinc-400">
         {label}
       </label>
+
       {children}
-    </div>
-  );
-}
-
-function PrintMeta({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null;
-}) {
-  if (!value) return null;
-
-  return (
-    <div className="mb-3 last:mb-0">
-      <p className="text-xs uppercase tracking-wide text-zinc-500">
-        {label}
-      </p>
-      <p className="mt-1 font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function PrintSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="break-inside-avoid rounded-2xl border border-zinc-200 bg-white p-6">
-      <h2 className="mb-5 border-b border-zinc-200 pb-3 text-sm font-black uppercase tracking-[0.2em] text-pink-600">
-        {title}
-      </h2>
-
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function PrintRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null;
-}) {
-  if (!value) return null;
-
-  return (
-    <div className="grid gap-2 border-b border-zinc-100 pb-3 text-sm last:border-b-0 md:grid-cols-3">
-      <div className="font-semibold text-zinc-600">{label}</div>
-      <div className="whitespace-pre-wrap text-zinc-950 md:col-span-2">
-        {value}
-      </div>
     </div>
   );
 }

@@ -14,9 +14,13 @@ type ShowEventRow = {
   start_time: string;
   end_time: string | null;
   crew_call: string | null;
-  report_type: ShowEventForm["report_type"];
   cancelled: boolean;
   notes: string | null;
+  show_event_report_types:
+    | {
+        report_type_id: number;
+      }[]
+    | null;
 };
 
 // =====================================================
@@ -31,29 +35,31 @@ export async function createShowEvents(
     throw new Error("A show must have at least one event.");
   }
 
-const rows = events.map((event) => {
-  const startTime = formatLocalDateTime(event.start_time);
+  const rows = events.map((event) => {
+    const startTime = formatLocalDateTime(event.start_time);
 
-  if (!startTime) {
-    throw new Error(`The event "${event.title}" needs a start date and time.`);
-  }
+    if (!startTime) {
+      throw new Error(
+        `The event "${event.title}" needs a start date and time.`
+      );
+    }
 
-  return {
-    show_id: showId,
-    title: event.title.trim(),
-    event_type: event.event_type,
-    start_time: startTime,
-    end_time: formatLocalDateTime(event.end_time),
-    crew_call: event.crew_call || null,
-    report_type: event.report_type,
-    cancelled: event.cancelled,
-    notes: event.notes.trim() || null,
-  };
-});
+    return {
+      show_id: showId,
+      title: event.title.trim(),
+      event_type: event.event_type,
+      start_time: startTime,
+      end_time: formatLocalDateTime(event.end_time),
+      crew_call: event.crew_call || null,
+      cancelled: event.cancelled,
+      notes: event.notes.trim() || null,
+    };
+  });
 
-  const { error } = await supabase
+  const { data: createdEvents, error } = await supabase
     .from("show_events")
-    .insert(rows);
+    .insert(rows)
+    .select("id");
 
   if (error) {
     console.error(
@@ -61,7 +67,25 @@ const rows = events.map((event) => {
       JSON.stringify(error, null, 2)
     );
 
-    throw new Error(error.message || "Failed to create show events.");
+    throw new Error(
+      error.message || "Failed to create show events."
+    );
+  }
+
+  if (!createdEvents || createdEvents.length !== events.length) {
+    throw new Error(
+      "The events were created, but their report assignments could not be matched."
+    );
+  }
+
+  for (let index = 0; index < createdEvents.length; index += 1) {
+    const createdEvent = createdEvents[index];
+    const sourceEvent = events[index];
+
+    await saveEventReportTypes(
+      createdEvent.id,
+      sourceEvent.report_type_ids
+    );
   }
 }
 
@@ -82,9 +106,11 @@ export async function loadShowEvents(
       start_time,
       end_time,
       crew_call,
-      report_type,
       cancelled,
-      notes
+      notes,
+      show_event_report_types (
+        report_type_id
+      )
     `)
     .eq("show_id", showId)
     .order("start_time", { ascending: true });
@@ -95,10 +121,14 @@ export async function loadShowEvents(
       JSON.stringify(error, null, 2)
     );
 
-    throw new Error(error.message || "Failed to load show events.");
+    throw new Error(
+      error.message || "Failed to load show events."
+    );
   }
 
-  return ((data || []) as ShowEventRow[]).map(mapRowToForm);
+  return ((data || []) as unknown as ShowEventRow[]).map(
+    mapRowToForm
+  );
 }
 
 // =====================================================
@@ -114,24 +144,31 @@ export async function replaceShowEvents(
   }
 
   const existingEvents = events.filter(
-    (event): event is ShowEventForm & { id: number } =>
-      typeof event.id === "number"
+    (
+      event
+    ): event is ShowEventForm & {
+      id: number;
+    } => typeof event.id === "number"
   );
 
   const newEvents = events.filter(
     (event) => typeof event.id !== "number"
   );
 
-  // Find the events currently stored for this show.
   const { data: storedEvents, error: loadError } = await supabase
     .from("show_events")
     .select("id")
     .eq("show_id", showId);
 
   if (loadError) {
-    console.error("Load existing show events failed:", loadError);
+    console.error(
+      "Load existing show events failed:",
+      loadError
+    );
+
     throw new Error(
-      loadError.message || "Failed to load existing show events."
+      loadError.message ||
+        "Failed to load existing show events."
     );
   }
 
@@ -144,7 +181,7 @@ export async function replaceShowEvents(
       ?.map((event) => event.id)
       .filter((eventId) => !retainedIds.has(eventId)) || [];
 
-  // Only delete events the user actually removed.
+  // Only delete events removed by the user.
   if (eventIdsToDelete.length > 0) {
     const { error: deleteError } = await supabase
       .from("show_events")
@@ -153,17 +190,24 @@ export async function replaceShowEvents(
       .in("id", eventIdsToDelete);
 
     if (deleteError) {
-      console.error("Delete removed show events failed:", deleteError);
+      console.error(
+        "Delete removed show events failed:",
+        deleteError
+      );
+
       throw new Error(
-        deleteError.message || "Failed to remove deleted show events."
+        deleteError.message ||
+          "Failed to remove deleted show events."
       );
     }
   }
 
-  // Update existing events without changing their IDs.
+  // Update existing events while preserving their IDs.
   if (existingEvents.length > 0) {
     const updateRows = existingEvents.map((event) => {
-      const startTime = formatLocalDateTime(event.start_time);
+      const startTime = formatLocalDateTime(
+        event.start_time
+      );
 
       if (!startTime) {
         throw new Error(
@@ -179,7 +223,6 @@ export async function replaceShowEvents(
         start_time: startTime,
         end_time: formatLocalDateTime(event.end_time),
         crew_call: event.crew_call || null,
-        report_type: event.report_type,
         cancelled: event.cancelled,
         notes: event.notes.trim() || null,
         updated_at: new Date().toISOString(),
@@ -193,14 +236,26 @@ export async function replaceShowEvents(
       });
 
     if (updateError) {
-      console.error("Update show events failed:", updateError);
+      console.error(
+        "Update show events failed:",
+        updateError
+      );
+
       throw new Error(
-        updateError.message || "Failed to update show events."
+        updateError.message ||
+          "Failed to update show events."
+      );
+    }
+
+    for (const event of existingEvents) {
+      await saveEventReportTypes(
+        event.id,
+        event.report_type_ids
       );
     }
   }
 
-  // Insert only newly added events.
+  // Insert newly added events and their report assignments.
   if (newEvents.length > 0) {
     await createShowEvents(showId, newEvents);
   }
@@ -222,7 +277,10 @@ function mapRowToForm(row: ShowEventRow): ShowEventForm {
       ? new Date(row.end_time)
       : null,
     crew_call: row.crew_call || "",
-    report_type: row.report_type,
+    report_type_ids:
+      row.show_event_report_types?.map(
+        (assignment) => assignment.report_type_id
+      ) || [],
     cancelled: row.cancelled,
     notes: row.notes || "",
   };
@@ -232,10 +290,73 @@ function formatLocalDateTime(date: Date | null) {
   if (!date) return null;
 
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  );
   const day = String(date.getDate()).padStart(2, "0");
   const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(
+    2,
+    "0"
+  );
 
   return `${year}-${month}-${day}T${hours}:${minutes}:00`;
+}
+
+// =====================================================
+// Report Type Assignments
+// =====================================================
+
+async function saveEventReportTypes(
+  eventId: number,
+  reportTypeIds: number[]
+) {
+  const { error: deleteError } = await supabase
+    .from("show_event_report_types")
+    .delete()
+    .eq("show_event_id", eventId);
+
+  if (deleteError) {
+    console.error(
+      "Delete event report types failed:",
+      deleteError
+    );
+
+    throw new Error(
+      deleteError.message ||
+        "Failed to update event report types."
+    );
+  }
+
+  if (reportTypeIds.length === 0) {
+    return;
+  }
+
+  const uniqueReportTypeIds = [
+    ...new Set(reportTypeIds),
+  ];
+
+  const rows = uniqueReportTypeIds.map(
+    (reportTypeId) => ({
+      show_event_id: eventId,
+      report_type_id: reportTypeId,
+    })
+  );
+
+  const { error: insertError } = await supabase
+    .from("show_event_report_types")
+    .insert(rows);
+
+  if (insertError) {
+    console.error(
+      "Insert event report types failed:",
+      insertError
+    );
+
+    throw new Error(
+      insertError.message ||
+        "Failed to save event report types."
+    );
+  }
 }

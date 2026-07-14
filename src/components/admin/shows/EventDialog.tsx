@@ -12,9 +12,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import {
-  emptyShowEvent,
-  type ShowEventForm,
+import { emptyShowEvent} from "./types";
+
+import type {
+  ShowEventForm,
+  ShowReportType,
 } from "./types";
 
 // =====================================================
@@ -27,18 +29,8 @@ type EventDialogProps = {
   event: ShowEventForm | null;
   onSave: (event: ShowEventForm) => void;
   parentDate: Date | null;
+  reportTypes: ShowReportType[];
 };
-
-// =====================================================
-// Constants
-// =====================================================
-
-const REPORT_TYPES: ShowEventForm["report_type"][] = [
-  "Technical",
-  "FOH",
-  "Both",
-  "None",
-];
 
 // =====================================================
 // Component
@@ -50,6 +42,7 @@ export default function EventDialog({
   event,
   onSave,
   parentDate,
+  reportTypes,
 }: EventDialogProps) {
   const [form, setForm] = useState<ShowEventForm>({
     ...emptyShowEvent,
@@ -164,28 +157,65 @@ export default function EventDialog({
               </select>
             </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-zinc-300">
-                Report Type
-              </span>
+            <div className="sm:col-span-2">
+  <div className="space-y-2">
+    <p className="text-sm font-medium text-zinc-300">
+      Reports Required
+    </p>
 
-              <select
-                value={form.report_type}
-                onChange={(event) =>
-                  updateForm(
-                    "report_type",
-                    event.target.value as ShowEventForm["report_type"]
-                  )
-                }
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
-              >
-                {REPORT_TYPES.map((reportType) => (
-                  <option key={reportType} value={reportType}>
-                    {reportType}
-                  </option>
-                ))}
-              </select>
+    <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950 p-4">
+      {reportTypes.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          No report types available.
+        </p>
+      ) : (
+        reportTypes.map((reportType) => {
+          const selected = form.report_type_ids.includes(
+            reportType.id
+          );
+
+          return (
+            <label
+              key={reportType.id}
+              className="flex cursor-pointer items-start gap-3 rounded-xl p-3 transition hover:bg-white/5"
+            >
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => {
+                  setForm((current) => ({
+                    ...current,
+                    report_type_ids: selected
+                      ? current.report_type_ids.filter(
+                          (id) => id !== reportType.id
+                        )
+                      : [
+                          ...current.report_type_ids,
+                          reportType.id,
+                        ],
+                  }));
+                }}
+                className="mt-1 h-4 w-4"
+              />
+
+              <div>
+                <p className="font-medium text-white">
+                  {reportType.name}
+                </p>
+
+                {reportType.description && (
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {reportType.description}
+                  </p>
+                )}
+              </div>
             </label>
+          );
+        })
+      )}
+    </div>
+  </div>
+</div>
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-zinc-300">

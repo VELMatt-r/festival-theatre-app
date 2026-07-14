@@ -1,171 +1,235 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import AppLayout from "@/components/layout/AppLayout";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+
+type ReportType = {
+  id: number;
+  name: string;
+  form_key: string;
+};
+
+type EventReportAssignment = {
+  show_report_types: ReportType | null;
+};
 
 type Show = {
   id: number;
   name: string | null;
-  date_time: string | null;
   venue: string | null;
   venue_id: number | null;
 };
 
-type Venue = {
+type ShowEvent = {
   id: number;
-  name: string;
-  requires_opening_checks: boolean;
-};
-
-type CrewMember = {
-  id: number;
-  name: string;
-  role: string | null;
-  department: string | null;
-  status: string | null;
+  title: string;
+  event_type: string;
+  start_time: string;
+  end_time: string | null;
+  cancelled: boolean;
+  shows: Show | null;
+  show_event_report_types: EventReportAssignment[];
 };
 
 export default function NewShowReportPage() {
-  const [shows, setShows] = useState<Show[]>([]);
-  const [venues, setVenues] = useState<Venue[]>([]);
-  const [crew, setCrew] = useState<CrewMember[]>([]);
   const router = useRouter();
 
-  const [selectedShowId, setSelectedShowId] = useState("");
-  const [selectedShow, setSelectedShow] = useState<Show | null>(null);
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+  const [events, setEvents] = useState<ShowEvent[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [selectedReportTypeId, setSelectedReportTypeId] =
+    useState("");
 
-  const [dutyTechnicianId, setDutyTechnicianId] = useState("");
-  const [dutyManagerId, setDutyManagerId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    loadData();
+    loadEvents();
   }, []);
 
-  async function loadData() {
+  async function loadEvents() {
+    setLoading(true);
 
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  
-    const [showsResult, venuesResult, crewResult] = await Promise.all([
-      supabase
-        .from("shows")
-        .select("id, name, date_time, venue, venue_id")
-        .gte(
-          "date_time",
-          new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const { data, error } = await supabase
+      .from("show_events")
+      .select(`
+        id,
+        title,
+        event_type,
+        start_time,
+        end_time,
+        cancelled,
+
+        shows (
+          id,
+          name,
+          venue,
+          venue_id
+        ),
+
+        show_event_report_types (
+          show_report_types (
+            id,
+            name,
+            form_key
           )
-        .order("date_time", { ascending: true }),
+        )
+      `)
+      .gte("start_time", yesterday.toISOString())
+      .eq("cancelled", false)
+      .order("start_time", { ascending: true });
 
-      supabase
-        .from("venues")
-        .select("id, name, requires_opening_checks"),
-
-      supabase
-        .from("profiles")
-        .select("id, name, role, department, status")
-        .eq("status", "active")
-        .order("name"),
-    ]);
-
-    if (showsResult.error) console.error(showsResult.error);
-    if (venuesResult.error) console.error(venuesResult.error);
-    if (crewResult.error) console.error(crewResult.error);
-
-    setShows(showsResult.data || []);
-    setVenues(venuesResult.data || []);
-    setCrew(crewResult.data || []);
-  }
-
-  function handleShowChange(showId: string) {
-    setSelectedShowId(showId);
-
-    const show = shows.find((item) => item.id === Number(showId)) || null;
-    setSelectedShow(show);
-
-    const venue =
-      venues.find((item) => item.id === show?.venue_id) || null;
-
-    setSelectedVenue(venue);
-  }
-
-  async function saveDraft() {
-    if (!selectedShow) {
-      alert("Please select a show.");
+    if (error) {
+      console.error("Load report events failed:", error);
+      setLoading(false);
       return;
     }
 
-    const performanceDate = selectedShow.date_time
-      ? new Date(selectedShow.date_time).toISOString().split("T")[0]
-      : null;
+    setEvents((data || []) as unknown as ShowEvent[]);
+    setLoading(false);
+  }
 
-    const performanceTime = selectedShow.date_time
-      ? new Date(selectedShow.date_time).toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "";
+  const selectedEvent =
+    events.find(
+      (event) => event.id === Number(selectedEventId)
+    ) || null;
+
+  const reportTypes: ReportType[] =
+    selectedEvent?.show_event_report_types
+      ?.map((assignment) => assignment.show_report_types)
+      .filter(
+        (reportType): reportType is ReportType =>
+          reportType !== null
+      ) || [];
+
+  const selectedReportType =
+    reportTypes.find(
+      (reportType) =>
+        reportType.id === Number(selectedReportTypeId)
+    ) || null;
+
+  function handleEventChange(eventId: string) {
+    setSelectedEventId(eventId);
+    setSelectedReportTypeId("");
+  }
+
+  async function createOrOpenReport() {
+    if (!selectedEvent) {
+      alert("Please select an event.");
+      return;
+    }
+
+    if (!selectedReportType) {
+      alert("Please select a report type.");
+      return;
+    }
+
+    setCreating(true);
+
+    const { data: existingReport, error: existingError } =
+      await supabase
+        .from("show_reports")
+        .select("id")
+        .eq("show_event_id", selectedEvent.id)
+        .eq(
+          "report_form_key",
+          selectedReportType.form_key
+        )
+        .maybeSingle();
+
+    if (existingError) {
+      console.error(
+        "Check existing report failed:",
+        existingError
+      );
+
+      alert(
+        existingError.message ||
+          "Failed to check for an existing report."
+      );
+
+      setCreating(false);
+      return;
+    }
+
+    if (existingReport) {
+      router.push(`/reports/${existingReport.id}`);
+      return;
+    }
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data, error } = await supabase
-  .from("show_reports")
-  .insert([
-    {
-      show_id: selectedShow.id,
-      venue_id: selectedShow.venue_id,
-      venue_name: selectedShow.venue,
-      show_name: selectedShow.name,
-      performance_date: performanceDate,
-      performance_time: performanceTime,
-      duty_technician_id: dutyTechnicianId
-        ? Number(dutyTechnicianId)
-        : null,
-      duty_manager_id: dutyManagerId
-        ? Number(dutyManagerId)
-        : null,
-      status: "draft",
-      created_by: user?.id || null,
-    },
-  ])
-  .select()
-  .single();
+    const eventStart = new Date(selectedEvent.start_time);
+    const show = selectedEvent.shows;
 
-    if (error) {
-      console.error(error);
-      alert("Failed to save report draft.");
+    const { data: createdReport, error: createError } =
+      await supabase
+        .from("show_reports")
+        .insert({
+          show_id: show?.id || null,
+          show_event_id: selectedEvent.id,
+
+          venue_id: show?.venue_id || null,
+          venue_name: show?.venue || null,
+
+          show_name:
+            show?.name || selectedEvent.title || "Untitled",
+
+          performance_date: formatLocalDate(eventStart),
+          performance_time: formatLocalTime(eventStart),
+
+          report_form_key: selectedReportType.form_key,
+
+          status: "draft",
+          created_by: user?.id || null,
+        })
+        .select("id")
+        .single();
+
+    if (createError) {
+      console.error(
+        "Create event report failed:",
+        createError
+      );
+
+      alert(
+        createError.message ||
+          "Failed to create report draft."
+      );
+
+      setCreating(false);
       return;
     }
 
-    router.push(`/reports/${data.id}`);alert("Report draft created.");
+    router.push(`/reports/${createdReport.id}`);
   }
 
-  const technicalCrew = crew.filter(
-    (member) =>
-      member.department?.toLowerCase() === "technical"
-  );
-
-  const dutyManagers = crew.filter((member) =>
-    member.role?.toLowerCase().includes("house manager")
-  );
-
-  const showDate = selectedShow?.date_time
-    ? new Date(selectedShow.date_time).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+  const eventDate = selectedEvent
+    ? new Date(selectedEvent.start_time).toLocaleDateString(
+        "en-GB",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      )
     : "";
 
-  const showTime = selectedShow?.date_time
-    ? new Date(selectedShow.date_time).toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+  const eventTime = selectedEvent
+    ? new Date(selectedEvent.start_time).toLocaleTimeString(
+        "en-GB",
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      )
     : "";
 
   return (
@@ -177,110 +241,138 @@ export default function NewShowReportPage() {
           </p>
 
           <h1 className="mt-2 text-3xl font-bold">
-            New Show Report
+            New Report
           </h1>
 
           <p className="mt-2 text-zinc-400">
-            Create a report draft for a show.
+            Create or continue a report for a scheduled
+            event.
           </p>
         </div>
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm text-zinc-400">
-                Show
-              </label>
+          {loading ? (
+            <p className="text-zinc-400">
+              Loading events...
+            </p>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  Event
+                </label>
 
-              <select
-                value={selectedShowId}
-                onChange={(event) =>
-                  handleShowChange(event.target.value)
-                }
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-              >
-                <option value="">Select Show</option>
+                <select
+                  value={selectedEventId}
+                  onChange={(event) =>
+                    handleEventChange(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
+                >
+                  <option value="">Select Event</option>
 
-                {shows.map((show) => (
-                  <option key={show.id} value={show.id}>
-                    {show.name}{" "}
-                    {show.date_time
-                      ? `- ${new Date(show.date_time).toLocaleDateString(
-                          "en-GB"
-                        )}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+                  {events.map((event) => (
+                    <option
+                      key={event.id}
+                      value={event.id}
+                    >
+                      {event.title} —{" "}
+                      {event.shows?.name || "No parent show"} —{" "}
+                      {new Date(
+                        event.start_time
+                      ).toLocaleDateString("en-GB")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedEvent && (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ReadOnlyField
+                      label="Parent Show"
+                      value={
+                        selectedEvent.shows?.name || ""
+                      }
+                    />
+
+                    <ReadOnlyField
+                      label="Event Type"
+                      value={selectedEvent.event_type}
+                    />
+
+                    <ReadOnlyField
+                      label="Venue"
+                      value={
+                        selectedEvent.shows?.venue || ""
+                      }
+                    />
+
+                    <ReadOnlyField
+                      label="Date"
+                      value={eventDate}
+                    />
+
+                    <ReadOnlyField
+                      label="Time"
+                      value={eventTime}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Report Type
+                    </label>
+
+                    {reportTypes.length === 0 ? (
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-sm text-amber-200">
+                        No report types are assigned to this
+                        event.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedReportTypeId}
+                        onChange={(event) =>
+                          setSelectedReportTypeId(
+                            event.target.value
+                          )
+                        }
+                        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
+                      >
+                        <option value="">
+                          Select Report Type
+                        </option>
+
+                        {reportTypes.map((reportType) => (
+                          <option
+                            key={reportType.id}
+                            value={reportType.id}
+                          >
+                            {reportType.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={createOrOpenReport}
+                      disabled={
+                        !selectedReportType || creating
+                      }
+                      className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      {creating
+                        ? "Opening Report..."
+                        : "Create / Open Report"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-
-            <ReadOnlyField label="Venue" value={selectedShow?.venue || ""} />
-            <ReadOnlyField label="Date" value={showDate} />
-            <ReadOnlyField label="Performance Time" value={showTime} />
-
-            <ReadOnlyField
-              label="Opening Checks"
-              value={
-                selectedVenue?.requires_opening_checks
-                  ? "Required"
-                  : "Not required"
-              }
-            />
-
-            <div>
-              <label className="mb-2 block text-sm text-zinc-400">
-                Duty Technician
-              </label>
-
-              <select
-                value={dutyTechnicianId}
-                onChange={(event) =>
-                  setDutyTechnicianId(event.target.value)
-                }
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-              >
-                <option value="">Select Duty Technician</option>
-
-                {technicalCrew.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-zinc-400">
-                Duty Manager
-              </label>
-
-              <select
-                value={dutyManagerId}
-                onChange={(event) =>
-                  setDutyManagerId(event.target.value)
-                }
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-white"
-              >
-                <option value="">Select Duty Manager</option>
-
-                {dutyManagers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={saveDraft}
-              className="rounded-xl bg-indigo-600 px-5 py-3 font-medium transition hover:bg-indigo-500"
-            >
-              Create Draft Report
-            </button>
-          </div>
+          )}
         </section>
       </div>
     </AppLayout>
@@ -305,4 +397,25 @@ function ReadOnlyField({
       </div>
     </div>
   );
+}
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  );
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalTime(date: Date) {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(
+    2,
+    "0"
+  );
+
+  return `${hours}:${minutes}`;
 }

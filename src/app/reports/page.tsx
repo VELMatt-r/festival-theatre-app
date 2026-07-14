@@ -8,13 +8,18 @@ import { supabase } from "@/lib/supabase";
 type Report = {
   id: number;
   show_name: string | null;
+  show_event_id: number | null;
+  report_form_key: string | null;
   venue_name: string | null;
-  performance_date: string | null;
-  performance_time: string | null;
   status: string | null;
   created_at: string | null;
   submitted_at: string | null;
   submitted_by_name: string | null;
+
+  event: {
+    title: string;
+    start_time: string;
+  } | null;
 };
 
 export default function ReportsPage() {
@@ -26,30 +31,95 @@ export default function ReportsPage() {
     loadReports();
   }, []);
 
-  async function loadReports() {
-    const { data, error } = await supabase
+ async function loadReports() {
+  const { data: reportData, error: reportsError } =
+    await supabase
       .from("show_reports")
       .select(`
         id,
         show_name,
+        show_event_id,
+        report_form_key,
         venue_name,
-        performance_date,
-        performance_time,
         status,
         created_at,
         submitted_at,
         submitted_by_name
-      `) 
+      `)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Load reports failed:", JSON.stringify(error, null, 2));
-alert(error.message || "Failed to load reports.");
-      return;
-    }
+  if (reportsError) {
+    console.error(
+      "Load reports failed:",
+      JSON.stringify(reportsError, null, 2)
+    );
 
-    setReports(data || []);
+    alert(
+      reportsError.message || "Failed to load reports."
+    );
+
+    return;
   }
+
+  const eventIds = [
+    ...new Set(
+      (reportData || [])
+        .map((report) => report.show_event_id)
+        .filter(
+          (eventId): eventId is number =>
+            typeof eventId === "number"
+        )
+    ),
+  ];
+
+  let eventMap = new Map<
+    number,
+    {
+      title: string;
+      start_time: string;
+    }
+  >();
+
+  if (eventIds.length > 0) {
+    const { data: eventData, error: eventsError } =
+      await supabase
+        .from("show_events")
+        .select(`
+          id,
+          title,
+          start_time
+        `)
+        .in("id", eventIds);
+
+    if (eventsError) {
+      console.error(
+        "Load report events failed:",
+        JSON.stringify(eventsError, null, 2)
+      );
+    } else {
+      eventMap = new Map(
+        (eventData || []).map((event) => [
+          event.id,
+          {
+            title: event.title,
+            start_time: event.start_time,
+          },
+        ])
+      );
+    }
+  }
+
+  const mappedReports: Report[] = (reportData || []).map(
+    (report) => ({
+      ...report,
+      event: report.show_event_id
+        ? eventMap.get(report.show_event_id) || null
+        : null,
+    })
+  );
+
+  setReports(mappedReports);
+}
 
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
@@ -132,61 +202,97 @@ alert(error.message || "Failed to load reports.");
     key={report.id}
     className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-indigo-500"
   >
-    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-      <div>
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold">
-            {report.show_name || "Untitled Show"}
-          </h2>
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+  <div className="min-w-0 flex-1">
+    <div className="flex flex-wrap items-center gap-3">
+      <h2 className="text-xl font-bold">
+        {report.show_name || "Untitled Show"}
+      </h2>
 
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              report.status === "submitted"
-                ? "bg-green-500/20 text-green-300"
-                : "bg-yellow-500/20 text-yellow-300"
-            }`}
-          >
-            {report.status}
-          </span>
-        </div>
-
-        <p className="mt-2 text-zinc-400">
-          {report.venue_name}
-        </p>
-
-        <div className="mt-1 text-sm text-zinc-500">
-  <p>
-    {report.performance_date
-      ? new Date(report.performance_date).toLocaleDateString("en-GB")
-      : "No Date"}{" "}
-    · {report.performance_time}
-  </p>
-
-  {report.status === "submitted" && report.submitted_at && (
-    <p className="mt-2 text-xs text-zinc-500">
-      Submitted by {report.submitted_by_name || "Unknown"} ·{" "}
-      {new Date(report.submitted_at).toLocaleString("en-GB")}
-    </p>
-  )}
-</div>
-      </div>
-
-      <div className="flex gap-2 text-sm">
-        <Link
-          href={`/reports/${report.id}`}
-          className="rounded-lg bg-zinc-800 px-4 py-2 text-zinc-300 transition hover:bg-zinc-700"
-        >
-          Open Report
-        </Link>
-
-        <Link
-          href={`/reports/${report.id}/print`}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-white transition hover:bg-indigo-500"
-        >
-          Print / Save PDF
-        </Link>
-      </div>
+      <span
+        className={`rounded-full px-3 py-1 text-xs font-medium ${
+          report.status?.toLowerCase() === "submitted"
+            ? "bg-green-500/20 text-green-300"
+            : "bg-yellow-500/20 text-yellow-300"
+        }`}
+      >
+        {report.status?.toLowerCase() === "submitted"
+          ? "Submitted"
+          : "Draft"}
+      </span>
     </div>
+
+    <p className="mt-2 font-medium text-indigo-300">
+      {report.event?.title || "Unknown Event"}
+      {" — "}
+      {getReportTypeLabel(report.report_form_key)}
+    </p>
+
+    <p className="mt-4 text-sm text-zinc-400">
+      {report.venue_name || "No venue"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-300">
+      {report.event?.start_time
+        ? new Date(
+            report.event.start_time
+          ).toLocaleString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Event date and time not set"}
+    </p>
+
+    {report.status?.toLowerCase() === "submitted" && (
+  <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 text-sm text-zinc-400">
+    <p>
+      Submitted By:{" "}
+      <span className="text-zinc-200">
+        {report.submitted_by_name || "Unknown"}
+      </span>
+    </p>
+
+    <p>
+      Submitted:{" "}
+      <span className="text-zinc-200">
+        {report.submitted_at
+          ? new Date(report.submitted_at).toLocaleString(
+              "en-GB",
+              {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }
+            )
+          : "Unknown"}
+      </span>
+    </p>
+  </div>
+)}
+  </div>
+
+  <div className="flex shrink-0 flex-wrap gap-3">
+    <Link
+      href={`/reports/${report.id}`}
+      className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium transition hover:bg-indigo-500"
+    >
+      Open Report
+    </Link>
+
+    <Link
+      href={`/reports/${report.id}/print`}
+      target="_blank"
+      className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-medium transition hover:bg-zinc-700"
+    >
+      Print / Save PDF
+    </Link>
+  </div>
+</div>
   </div>
 ))
           )}
@@ -194,4 +300,18 @@ alert(error.message || "Failed to load reports.");
       </div>
     </AppLayout>
   );
+}
+
+function getReportTypeLabel(formKey: string | null) {
+  switch (formKey) {
+    case "technical-getin":
+      return "Get-in Report";
+
+    case "technical-rehearsal":
+      return "Rehearsal Report";
+
+    case "technical-show":
+    default:
+      return "Technical Show Report";
+  }
 }
