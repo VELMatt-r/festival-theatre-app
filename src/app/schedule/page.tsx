@@ -520,28 +520,28 @@ async function openOrCreateReport(
             right: "dayGridMonth,timeGridWeek,timeGridDay",
           }}
           eventContent={(info) => {
-            const venueColour =
-            info.event.extendedProps.venueColour || "#6366f1";
+  const venueColour =
+    info.event.extendedProps.venueColour || "#6366f1";
 
-            return (
-              <div className="flex items-center gap-2">
-                <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: venueColour }}
-                />
+  return (
+    <div className="flex w-full items-start gap-2 whitespace-normal">
+      <span
+        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: venueColour }}
+      />
 
-                <span
-                className={
-                  info.event.extendedProps.cancelled
-                  ? "line-through"
-                  : ""
-                  }
-                >
-                  {info.event.title}
-              </span>
-            </div>
-          );
-          }}
+      <span
+        className={`min-w-0 flex-1 whitespace-normal break-words leading-tight ${
+          info.event.extendedProps.cancelled
+            ? "line-through"
+            : ""
+        }`}
+      >
+        {info.event.title}
+      </span>
+    </div>
+  );
+}}
           eventClick={(info) => {
             setSelectedEvent(info.event);
           }}
